@@ -1,0 +1,17 @@
+name = "symmetree"
+description = "symmetree.dev official"
+license = "MIT"
+homepage = "https://github.com/symmetree-labs/symmetree.dev"
+min_version = "0.11.0"
+demo = "https://symmetree.dev"
+
+[author]
+name = "Peter Parkanyi"
+homepage = "https://symmetree.dev"
+
+[original]
+name = "Huhu teams"
+homepage = "https://huhu.io"
+repo = "https://github.com/huhu/juice"
+
+[extra]

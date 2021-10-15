@@ -1,0 +1,22 @@
+{% macro render_header() %}
+{% set section = get_section(path="_index.md") %}
+<a href="{{ section.permalink }}">
+    <div class="logo">
+        <div alt="logo"></div>
+    </div>
+</a>
+
+<nav>
+    {% for page in section.pages %}
+    <a class="nav-item subtitle-text" href="{{ page.permalink }}">{{ page.title }}</a>
+    {% endfor %}
+    {% if config.extra.juice_extra_menu %}
+        {% for menu in config.extra.juice_extra_menu %}
+        <a class="nav-item subtitle-text" href="{{ menu.link }}">{{ menu.title }}</a>
+        {% endfor %}
+    {% endif %}
+    <a id="request-call" class="nav-item" href="mailto:hello@symmetree.dev?subject=Call%20request&body=I%20kindly%20request%20a%20call.%0A%0AMy%20contact%20information%20is:%0A%0AName:%0ACompany:%0APhone%20number%20or%20online%20meeting%20link:">Request a call</a>
+
+    <a id="github" class="nav-item"  href="https://github.com/symmetree-labs/"><img src="github.png" ></a>
+</nav>
+{% endmacro render_header %}
