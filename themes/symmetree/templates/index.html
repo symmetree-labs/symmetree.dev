@@ -1,120 +1,12 @@
 {% import "_macros.html" as macros %}
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <title>{% block title %}{{ config.title }}{% endblock title %}</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    {% include "_variables.html" %}
-    <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,500,600&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css?family=Poppins:400,500,600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/normalize.css">
-    <link rel="stylesheet" href="{{ get_url(path="main.css") }}">
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-    <link rel="manifest" href="/site.webmanifest">
-    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#2f2ff4">
-    <meta name="msapplication-TileColor" content="#ecf0f1">
-    <meta name="theme-color" content="#ffffff">
-    {% block head %}
-    {% endblock head %}
-</head>
+{% block hero %}
+<div class="hero">
+  {% include "_hero.html" %}
+</div>
+{% endblock hero %}
 
-<body>
-    {% block header %}
-
-    <header class="pos-absolute">
-        {{ macros::render_header() }}
-    </header>
-
-    <div class="hero">
-        {% block hero %}
-	{% include "_hero.html" %}
-        {% endblock hero %}
-    </div>
-
-    {% endblock header %}
-
-    <main>
-        {% block toc %}
-        {% if section.toc %}
-        {% set toc = section.toc %}
-        {% elif page.toc %}
-        {% set toc = page.toc %}
-        {% endif %}
-        {% if toc and section.extra.toc %}
-        <div class="toc">
-            <div class="toc-sticky">
-                {% for h in toc %}
-                <div class="toc-item">
-                    <a class="subtext" href="{{h.permalink | safe}}">{{ h.title }}</a>
-                </div>
-                {% if h.children %}
-                {% for h2 in h.children %}
-                <div class="toc-item-child">
-                    <a class="subtext" href="{{h2.permalink | safe}}"><small>- {{ h2.title }}</small></a>
-                </div>
-                {% endfor %}
-                {% endif %}
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-        {% endblock toc %}
-
-        <div class="content text">
-            {% block content %}
-            {{ section.content | safe }}
-            {% endblock content %}
-        </div>
-
-        {% block sidebar %}
-        {% endblock %}
-    </main>
-
-    {% block footer %}
-    <footer>
-        <small class="subtext">
-            <a href="https://symmetree.dev">Symmetree Research Labs</a> © 2021
-        </small>
-    </footer>
-    {% endblock footer %}
-</body>
-<script>
-    function highlightNav(heading) {
-        let pathname = location.pathname;
-        document.querySelectorAll(".toc a").forEach((item) => {
-            item.classList.remove("active");
-        });
-        document.querySelector(".toc a[href$='" + pathname + "#" + heading + "']").classList.add("active");
-    }
-
-    let currentHeading = "";
-    window.onscroll = function () {
-        let h = document.querySelectorAll("h1,h2,h3,h4,h5,h6");
-        let elementArr = [];
-
-        h.forEach(item => {
-            if (item.id !== "") {
-                elementArr[item.id] = item.getBoundingClientRect().top;
-            }
-        });
-        elementArr.sort();
-        for (let key in elementArr) {
-            if (!elementArr.hasOwnProperty(key)) {
-                continue;
-            }
-            if (elementArr[key] > 0 && elementArr[key] < 300) {
-                if (currentHeading !== key) {
-                    highlightNav(key);
-                    currentHeading = key;
-                }
-                break;
-            }
-        }
-    }
-</script>
-
-</html>
+{% block content %}
+{{ section.content | safe }}
+{% endblock content %}

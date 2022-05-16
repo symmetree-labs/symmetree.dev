@@ -90,11 +90,11 @@ Get in touch to learn how we can help you with your data ops challenges.
 <div>
 
 <p class="button float-left pull-right w-33">
-    <a href="mailto:hello@symmetree.dev?subject=Call%20request&body=I%20kindly%20request%20a%20call.%0A%0AMy%20contact%20information%20is:%0A%0AName:%0ACompany:%0APhone%20number%20or%20online%20meeting%20link:">Read the docs</a>
+    <a href="https://docs.rs/infinitree">Read the docs</a>
 </p>
 
 <p class="button float-right pull-left w-33">
-    <a href="mailto:hello@symmetree.dev?subject=Call%20request&body=I%20kindly%20request%20a%20call.%0A%0AMy%20contact%20information%20is:%0A%0AName:%0ACompany:%0APhone%20number%20or%20online%20meeting%20link:">Request a call</a>
+    <a href="mailto:hello@symmetree.dev?subject=Call%20request&body=I%20kindly%20request%20a%20call.%0A%0AMy%20contact%20information%20is:%0A%0AName:%0ACompany:%0APhone%20number%20or%20online%20meeting%20link:">Get in touch!</a>
 </p>
 
 </div>

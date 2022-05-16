@@ -84,6 +84,9 @@ nav {
   font-size: 18px;
   font-weight: bold;
   vertical-align: middle;
+  color: var(--hero-background-color);
+      font-family: "Poppins", serif;
+      text-transform: uppercase;
 
   &:hover {
       filter: invert(50%);
