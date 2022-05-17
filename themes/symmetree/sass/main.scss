@@ -58,7 +58,7 @@ header {
 nav {
     vertical-align: middle;
 
-    #github {
+    img.item {
 	width: 32px;
 	height: 32px;
 
@@ -87,11 +87,17 @@ nav {
   color: var(--hero-background-color);
       font-family: "Poppins", serif;
       text-transform: uppercase;
+      display: table-cell;
+      padding: 1em;
 
   &:hover {
       filter: invert(50%);
   }
 }
+}
+
+.filter-invert {
+    filter: invert(100%);
 }
 
 .hero {
