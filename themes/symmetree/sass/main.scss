@@ -212,12 +212,25 @@ main {
       width: 50%;
   }
 
+  .w-66 {
+      width: 66%;
+  }
+
   .p-10 {
       padding: 0 10%;
   }
 
+  .m-paragraph {
+      margin: 2.3em 0;
+  }
+
   .content {
       max-width: 800px;
+  }
+
+  .centered {
+      margin-left: auto;
+      margin-right: auto;
   }
 
   .toc {
