@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Symmetree Research Labs</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <style>
+    :root {
+        /* Primary theme color */
+        --primary-color: #2F2FF4;
+        /* Primary theme text color */
+        --primary-text-color: #232246;
+        /* Primary theme link color */
+        --primary-link-color: #CA2A4C;
+        /* Secondary color: the background body color */
+        --secondary-color: #ECF0F1;
+        --secondary-text-color: #2F2FF4;
+        /* Highlight text color of table of content */
+        --toc-highlight-text-color: #d46e13;
+	--hero-background-color: #ECF0F1; 
+	--hero-text-color: #232246; 
+    }
+</style>
+
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,500,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Poppins:400,500,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/normalize.css">
+    <link rel="stylesheet" href="https://symmetree.dev/main.css">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#2f2ff4">
+    <link rel="alternate" type="application/atom+xml" title="Atom Feed" href="https://symmetree.dev/atom.xml">
+    <meta name="description" content="fast and secure storage">
+    <meta name="msapplication-TileColor" content="#ecf0f1">
+    <meta name="theme-color" content="#ffffff">
+    <meta property="twitter:site" content="@rhapsodhy">
+    <meta property="twitter:title" content="rsdy">
+    <meta property="twitter:card" content="summary">
+    <meta property="og:site_name" content="symmetree.dev">
+    <meta property="og:locale" content="en-us">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://symmetree.dev/">
+    <meta property="og:title" content="symmetree.dev">
+    
+    
+</head>
+
+<body>
+    
+
+    <header class="pos-absolute">
+        
+
+<a href="https:&#x2F;&#x2F;symmetree.dev&#x2F;">
+    <div class="logo">
+        <div alt="logo"></div>
+    </div>
+</a>
+
+<nav>
+    
+    
+
+    <a id="blog" class="nav-item" href="/blog">Blog</a>
+
+    <a class="nav-item"  href="https://symmetree.dev/atom.xml"><img class="item filter-invert" src="/rss.svg" alt="RSS feed" title="RSS feed"></a>
+    <a class="nav-item"  href="https://github.com/symmetree-labs/"><img class="item" src="/github.png" title="All the code" alt="GitHub"></a>
+    <a class="nav-item"  href="mailto:hello@symmetree.dev?subject=Hello!&body=I%20am%20getting%20in%20touch%20to%20discuss%20the%20life,%20the%20universe,%20and%20everything..."><img class="item filter-invert" src="/email.svg" alt="Get in touch!" title="Email us!"></a>
+</nav>
+
+    </header>
+
+    
+    
+
+    
+
+    <main>
+        
+        
+        
+        
+        
+        
+
+        <div class="content text">
+	  
+<h1 class="title">
+  Time to take a hard look at securing files
+</h1>
+<p class="subtitle"><strong>2022-05-16</strong></p>
+<p>In the past decade or so, loads of research piled into secure
+messaging, and, with the likes of the Signal protocol and its
+derivatives, the research reached mass adoption. Not only that, but we
+have a range of competing implementations that offer different privacy
+tradeoffs! <a href="https://www.youtube.com/watch?v=YyTJYI-JpHU">Supergeil!</a></p>
+<p>For some reason, the same effort has not piled into securing
+files. While we have <a href="https://github.com/FiloSottile/age">age</a> gradually
+displacing GPG for messaging (see a pattern?), the vast majority of
+file security and backup softwares are rooted in the 90s.</p>
+<p>In the rest of the article I'm going to rant a bit before I arrive at
+<em>my</em> solution. <a href="https://symmetree.dev/blog/01-serious-backups/#so-how-do-we-fix-file-storage">Jump ahead</a> if you're in a
+rush.</p>
+<h2 id="usable-security-or-lack-thereof">Usable security (or lack thereof)</h2>
+<p>On the one hand, we have robust tools that have been tested and vetted
+through exposure to time, which is great! Many eyeballs make every
+usability hell shallow (or something like that).</p>
+<p>On the other hand, this feels backwards: people are getting top notch
+user interfaces from Silicon Valley startups and gigacorps, while they
+have to navigate archaic and arcane configurations to secure their
+academic research with VeraCrypt.</p>
+<p>How should anyone know whether TwoFish is a reasonable choice of
+encryption, or they need to mix it with
+<a href="https://turbo.fish/">TurboFish-GUI-SIV</a> mode using <a href="https://www.youtube.com/watch?v=hkDD03yeLnU">Visual
+Basic</a> to make this
+secure for their needs?</p>
+<p>Proprietary software for file storage is cute, but mostly built for
+the enterprise market. And let's not delude ourselves about the
+quality of this stuff, these products are typically optimized for
+revenue over security.</p>
+<p><em>&quot;Can I still access my data trivially in 10 years time?&quot;</em> is a
+question I've heard multiple times during my research. Some people
+I've spoken to specifically avoid proprietary tools because their
+longevity is questionable.</p>
+<p>It seems that currently we can't have it both ways: it's either
+secure, or usable. </p>
+<h2 id="and-then-portability">And then: portability.</h2>
+<p>Many of open source backup software are written in Python. Performance
+hit the bottle's neck quickly and the fix was to add some C. And maybe
+do some <code>exec()</code> calls to a few ready-made software that's going to
+cut down on code size. Now you need a few different package managers
+to handle the complexity.</p>
+<p>All of this stuff is unapologetically designed for Linux, with a
+typical Linux user in mind from the 2000s when we were all compiling
+Gentoo from <code>stage1</code> to achieve best in class desktop performance (we
+never did).</p>
+<p>Recently, I had to spend a week away from my regular desktop, with a
+Linux laptop. <em>&quot;I have backups!&quot;</em>, or so I thought. Until I realised
+it's going to take a non-trivial amount of time to recover those from
+encrypted TimeMachine archives. It slowly sank in that my flawless
+strategy is utterly useless if I change one variable: the part of the
+computing stack that runs a browser and an Emacs, the operating
+system.</p>
+<p>Try using any Python open source stuff on Windows, and you'll feel the
+pain. WSL2 is cheating, that's a <a href="https://www.youtube.com/watch?v=dxIPcbmo1_U">Linux
+system</a>!</p>
+<h2 id="and-then-performance">And then: performance.</h2>
+<p>Needless to say, when any system depends on layers and layers of code
+and third party tools, it becomes a lot harder to tame
+performance. But things get even worse when you consider networks.</p>
+<p>In the past I've made the mistake of blindly shoveling data into a
+cloud backup provider with an open source client. I've even tested my
+backups! It was great. An endless pit of data on the cheap.</p>
+<p>That is, until I had to do a full system restore. Downloading and
+unpacking about 1TB took 3 or 4 days on a fast European Internet
+connection. That's when I realised that while I had lots of
+<em>bandwidth</em>, the <em>latency</em> to access chunks of my data were
+horrifically slow. Welp.</p>
+<h2 id="so-how-do-we-fix-file-storage">So how do we fix file storage?</h2>
+<p>In the last year of the Before Times, I wrote a prototype of
+<a href="https://github.com/symmetree-labs/zerostash">Zerostash</a> in Rust, with
+a few design goals in mind:</p>
+<ul>
+<li>Make it easy to re-implement in arbitrary languages</li>
+<li>Allow for a large number of use cases without hellish configuration</li>
+<li>Make it <a href="https://github.com/symmetree-labs/infinitree/blob/main/DESIGN.md">secure by default</a></li>
+<li>Make it fast</li>
+</ul>
+<p>The truth is, the original scheme sucked. Not because I messed up the
+goals, thankfully. It was an overly complex design that ultimately
+scaled badly. Many features were impossible to implement. It was
+really, very fast, though.</p>
+<p>So about a year ago I resigned at my dayjob, and decided spend my
+funemployed year learning how to enjoy writing software again by
+making Zerostash not suck.</p>
+<p>And here we are. Zerostash is now a fully usable, multiplatform,
+incremental, deduplicated backup tool that doesn't suck (so much).</p>
+<p>The CLI is modelled vaguely after Git commands, since it works pretty
+similarly to Git internally. You get to <code>commit</code>, <code>checkout</code>, <code>ls</code>, and
+<code>log</code> your archives. </p>
+<h2 id="where-does-a-newborn-go-from-here">Where does a newborn go from here?</h2>
+<p>One of the aspects of
+<a href="https://github.com/symmetree-labs/zerostash">Zerostash</a> and the
+underlying <a href="https://github.com/symmetree-labs/infinitree">Infinitree</a>
+library that I like the most is that the design allows building a
+bunch of different user experiences around one secure core.</p>
+<ul>
+<li>Integrate it silently into a GUI thingy? Sure.</li>
+<li>File systems through FUSE? Why not.</li>
+<li>Sync &amp; restore your workspace anywhere at high speeds? Please do.</li>
+<li>Encrypted Git? Yes please.</li>
+<li>Transparently encrypt all your customer data in Amazon S3? Hell yeah.</li>
+<li>Store your microservice application state in the cloud before reload?
+Of course.</li>
+<li>Build a replicated, encrypted database to replace your SQL logic
+with native Rust iterators? Ehm, maybe...</li>
+</ul>
+<p>In the coming weeks, I will go through some design decisions and
+solutions that went into Infinitree and Zerostash so they scale up and
+down.</p>
+<p>There are also a bunch of mundane things to implement, like garbage
+collection, or integrating streams into the CLI to allow ZFS piping
+snapshots into Zerostash.</p>
+<h2 id="fuck-around-and-find-out">Fuck around and find out</h2>
+<p>Going forward, I would love to continue working on Zerostash and the
+surrounding Rust ecosystem in a focused way, and I am looking for
+people who would support this journey!</p>
+<p>If you or your organization is in need of improving your data
+management story, why not <strong>hire me</strong>?</p>
+<p>Send me an email at <strong>p at symmetree.dev</strong>!</p>
+
+
+        </div>
+
+        
+        
+    </main>
+
+    
+    <footer>
+        <small class="subtext">
+            <a href="https://symmetree.dev">Symmetree Research Labs</a> © 2022
+        </small>
+    </footer>
+    
+</body>
+<script>
+    function highlightNav(heading) {
+        let pathname = location.pathname;
+        document.querySelectorAll(".toc a").forEach((item) => {
+            item.classList.remove("active");
+        });
+        document.querySelector(".toc a[href$='" + pathname + "#" + heading + "']").classList.add("active");
+    }
+
+    let currentHeading = "";
+    window.onscroll = function () {
+        let h = document.querySelectorAll("h1,h2,h3,h4,h5,h6");
+        let elementArr = [];
+
+        h.forEach(item => {
+            if (item.id !== "") {
+                elementArr[item.id] = item.getBoundingClientRect().top;
+            }
+        });
+        elementArr.sort();
+        for (let key in elementArr) {
+            if (!elementArr.hasOwnProperty(key)) {
+                continue;
+            }
+            if (elementArr[key] > 0 && elementArr[key] < 300) {
+                if (currentHeading !== key) {
+                    highlightNav(key);
+                    currentHeading = key;
+                }
+                break;
+            }
+        }
+    }
+</script>
+
+</html>

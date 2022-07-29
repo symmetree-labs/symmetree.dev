@@ -1,0 +1,724 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+	<title>Symmetree Research Labs</title>
+	<link href="https://symmetree.dev/atom.xml" rel="self" type="application/atom+xml"/>
+  <link href="https://symmetree.dev"/>
+	<generator uri="https://www.getzola.org/">Zola</generator>
+	<updated>2022-07-29T00:00:00+00:00</updated>
+	<id>https://symmetree.dev/atom.xml</id>
+	<entry xml:lang="en">
+		<title>Carrying API guarantees to the command line with Clap</title>
+		<published>2022-07-29T00:00:00+00:00</published>
+		<updated>2022-07-29T00:00:00+00:00</updated>
+		<link href="https://symmetree.dev/blog/04-api-to-cli/" type="text/html"/>
+		<id>https://symmetree.dev/blog/04-api-to-cli/</id>
+		<content type="html">&lt;p&gt;One of the primary principles of modern cryptographic design is to be
+resistant to misuse. In other words, a cryptographic primitive must
+provide interfaces that cannot be used in a way that results in a
+compromise of core security assurances.&lt;&#x2F;p&gt;
+&lt;p&gt;There is a very good reason people in crypto worlds, both as in
+-graphy and -currency, are enthusiastic about Rust: the type system is
+rich enough that we can make invalid states inexpressible in the code.
+This property allows a large number of assumptions to be validated at
+compile time, therefore making our runtime reasoning about the states
+in which the program &lt;em&gt;can&lt;&#x2F;em&gt; be much simpler.&lt;&#x2F;p&gt;
+&lt;p&gt;This kind of well-defined world gets much more complex to control once
+we try to expose the associated functionality on a CLI. In this fairly
+long ride, I&#x27;ll do a quick introduction of how it&#x27;s done in one of the
+core Rust cryptographic libraries that also underpins
+&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;rustls&#x2F;rustls&quot;&gt;&lt;code&gt;rustls&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;, then dive into some
+&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;symmetree-labs&#x2F;zerostash&quot;&gt;Zerostash&lt;&#x2F;a&gt; internals
+that drove the &lt;a href=&quot;&#x2F;blog&#x2F;03-hardware-and-asymmetry-05&#x2F;&quot;&gt;new command line
+options&lt;&#x2F;a&gt; in 0.5.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;communicating-intent-in-ring&quot;&gt;Communicating intent in Ring&lt;&#x2F;h2&gt;
+&lt;p&gt;Take, a real life example from
+&lt;a href=&quot;https:&#x2F;&#x2F;docs.rs&#x2F;infinitree&#x2F;latest&#x2F;infinitree&#x2F;&quot;&gt;infinitree&lt;&#x2F;a&gt; of using
+&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;briansmith&#x2F;ring&quot;&gt;ring&lt;&#x2F;a&gt;, a Rust wrapper around
+Google&#x27;s &lt;a href=&quot;https:&#x2F;&#x2F;boringssl.googlesource.com&#x2F;boringssl&#x2F;&quot;&gt;BoringSSL&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;use &lt;&#x2F;span&gt;&lt;span&gt;ring&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;aead&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; key &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;=
+&lt;&#x2F;span&gt;&lt;span&gt;        aead&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;UnboundKey&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;new(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;aead&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;CHACHA20_POLY1305&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; key&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;expose_secret&lt;&#x2F;span&gt;&lt;span&gt;())&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;expect&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;bad key&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; aead &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span&gt;aead&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;LessSafeKey&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;new(key)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; nonce &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;let mut&lt;&#x2F;span&gt;&lt;span&gt; buf &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span&gt;Nonce&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;default()&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;    buf&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;copy_from_slice&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;sealed[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;HEADER_CYPHERTEXT&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;..&lt;&#x2F;span&gt;&lt;span&gt;])&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;    aead&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;Nonce&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;assume_unique_for_key(buf)
+&lt;&#x2F;span&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; decrypted &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; aead
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;open_in_place&lt;&#x2F;span&gt;&lt;span&gt;(nonce&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;, &lt;&#x2F;span&gt;&lt;span&gt;aead&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;Aad&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;empty()&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; buf[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;..&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;HEADER_CYPHERTEXT&lt;&#x2F;span&gt;&lt;span&gt;])
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;map_err&lt;&#x2F;span&gt;&lt;span&gt;(CryptoError&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;from)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;?&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;There are a few things going on here, so let&#x27;s go through what
+happens, piece by piece, with an attention to how the API helps
+understanding implementation.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span&gt;aead&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;UnboundKey&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;new(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;aead&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;CHACHA20_POLY1305&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; key&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;expose_secret&lt;&#x2F;span&gt;&lt;span&gt;())&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;expect&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;bad key&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;First off,
+&lt;a href=&quot;https:&#x2F;&#x2F;docs.rs&#x2F;ring&#x2F;latest&#x2F;ring&#x2F;aead&#x2F;struct.UnboundKey.html&quot;&gt;&lt;code&gt;UnboundKey&lt;&#x2F;code&gt;&lt;&#x2F;a&gt;,
+according to the docs, is a &lt;em&gt;&amp;quot;An AEAD key without a designated role or
+nonce sequence.&amp;quot;&lt;&#x2F;em&gt;. The &lt;code&gt;new()&lt;&#x2F;code&gt; constructor, as we&#x27;re used to in Rust,
+will create us a key that is &lt;em&gt;not bound&lt;&#x2F;em&gt; to any nonce sequence. We
+can&#x27;t, therefore accidentally use the wrong kind of key in an
+unexpected place. It&#x27;s a different type.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span&gt;aead&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;LessSafeKey&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;new(key)
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;code&gt;LessSafeKey&lt;&#x2F;code&gt;? Huh? Less safe than &lt;em&gt;what&lt;&#x2F;em&gt;? Let&#x27;s see what the
+&lt;a href=&quot;https:&#x2F;&#x2F;www.youtube.com&#x2F;watch?v=jofNR_WkoCE&quot;&gt;&lt;del&gt;fox&lt;&#x2F;del&gt;&lt;&#x2F;a&gt; &lt;a href=&quot;https:&#x2F;&#x2F;docs.rs&#x2F;ring&#x2F;latest&#x2F;ring&#x2F;aead&#x2F;struct.LessSafeKey.html&quot;&gt;docs&lt;&#x2F;a&gt; say:&lt;&#x2F;p&gt;
+&lt;blockquote&gt;
+&lt;p&gt;Immutable keys for use in situations where &lt;code&gt;OpeningKey&lt;&#x2F;code&gt;&#x2F;&lt;code&gt;SealingKey&lt;&#x2F;code&gt;
+and &lt;code&gt;NonceSequence&lt;&#x2F;code&gt; cannot reasonably be used.&lt;&#x2F;p&gt;
+&lt;p&gt;Prefer to use &lt;code&gt;OpeningKey&lt;&#x2F;code&gt;&#x2F;&lt;code&gt;SealingKey&lt;&#x2F;code&gt; and NonceSequence when
+practical.&lt;&#x2F;p&gt;
+&lt;&#x2F;blockquote&gt;
+&lt;p&gt;Ah, that makes sense! There are better ways of using the API, but they
+are not always practical, so there&#x27;s a &lt;em&gt;less safe version&lt;&#x2F;em&gt; that can be
+used more freely!&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span&gt;aead&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;Nonce&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;assume_unique_for_key(buf)
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;The constructor&#x27;s name itself is highlighting to the API user that the
+&lt;a href=&quot;https:&#x2F;&#x2F;www.urbandictionary.com&#x2F;define.php?term=Nonce&quot;&gt;&lt;em&gt;n-once&lt;&#x2F;em&gt;&lt;&#x2F;a&gt;
+value must be unique. It&#x27;s an important implementation
+detail, an externality that cannot be sufficiently safeguarded against
+by the type system. Even if the &lt;code&gt;open_in_place&lt;&#x2F;code&gt; function consumes
+&lt;code&gt;nonce&lt;&#x2F;code&gt;, there&#x27;s no way for the type system to ensure it&#x27;s globally
+unique for every use of the &lt;code&gt;key&lt;&#x2F;code&gt; &lt;em&gt;in the universe&lt;&#x2F;em&gt;.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span&gt;aead&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;open_in_place&lt;&#x2F;span&gt;&lt;span&gt;(nonce&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;, &lt;&#x2F;span&gt;&lt;span&gt;aead&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;Aad&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;empty()&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;mut&lt;&#x2F;span&gt;&lt;span&gt; buf[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;..&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;HEADER_CYPHERTEXT&lt;&#x2F;span&gt;&lt;span&gt;])
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;And finally, a single glance at &lt;code&gt;open_in_place&lt;&#x2F;code&gt; will tell us
+everything about the data and parameters of the actual decryption
+operation.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;controlling-the-api-complexity&quot;&gt;Controlling the API complexity&lt;&#x2F;h2&gt;
+&lt;p&gt;An API that programmers use requires very different UX considerations
+from a tool on the command line. However, users of both will want most
+of the same assurances.&lt;&#x2F;p&gt;
+&lt;p&gt;While the underlying misuse-resistant API means it is easy to create
+an opinionated system that does The Right Thing one way, introducing a
+choice into this user experience is riddled with traps.&lt;&#x2F;p&gt;
+&lt;p&gt;Before &lt;code&gt;infinitree&lt;&#x2F;code&gt; 0.9, there was no way to change the encryption
+keys of a tree after creating it. This was a direct result of mostly
+profiler-driven development, and I kind of left it there to fix it
+later. Everything worked, and it was oh so simple!&lt;&#x2F;p&gt;
+&lt;p&gt;For
+&lt;a href=&quot;https:&#x2F;&#x2F;docs.rs&#x2F;infinitree&#x2F;0.9.0&#x2F;infinitree&#x2F;crypto&#x2F;index.html#changing-keys&quot;&gt;reasons&lt;&#x2F;a&gt;,
+changing keys requires some assumptions. Establishing the API that now
+provides the right amount of flexibility, static type checking, and
+ease of use, required a few iterations.&lt;&#x2F;p&gt;
+&lt;p&gt;This is how one changes the password in &lt;code&gt;infinitree&lt;&#x2F;code&gt; 0.9, ignoring all
+the &lt;code&gt;use&lt;&#x2F;code&gt;s:&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a name=&quot;the-code&quot;&gt;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;let&lt;&#x2F;span&gt;&lt;span&gt; key &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span&gt;ChangeHeaderKey&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;swap_on_seal(
+&lt;&#x2F;span&gt;&lt;span&gt;    UsernamePassword&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;with_credentials(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;username&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;to_string&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;                                       &lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;old_password&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;to_string&lt;&#x2F;span&gt;&lt;span&gt;())&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;unwrap&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    UsernamePassword&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;with_credentials(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;username&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;to_string&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;                                       &lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;new_password&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;to_string&lt;&#x2F;span&gt;&lt;span&gt;())&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;unwrap&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;let mut&lt;&#x2F;span&gt;&lt;span&gt; tree &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span&gt;Infinitree&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;VersionedMap&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;String&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;String&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;open(
+&lt;&#x2F;span&gt;&lt;span&gt;    Directory&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;new(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;&#x2F;storage&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;unwrap&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    key
+&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;unwrap&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;tree&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;reseal&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Looks simple enough. It might be surprising at first that
+there&#x27;s a special &lt;code&gt;ChangeHeaderKey&lt;&#x2F;code&gt; type instead of just &lt;code&gt;swap_key&lt;&#x2F;code&gt;
+for the &lt;code&gt;tree&lt;&#x2F;code&gt; instance.&lt;&#x2F;p&gt;
+&lt;p&gt;This is because under the hood, I wanted to ensure that all
+expressible key transitions are &lt;em&gt;safe&lt;&#x2F;em&gt;, and this is statically ensured
+by the type system.&lt;&#x2F;p&gt;
+&lt;p&gt;For what you see, you see, is a lie.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub type &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;UsernamePassword &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span&gt;KeyingScheme&amp;lt;Argon2UserPass, Symmetric&amp;gt;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Internally, the &lt;code&gt;UsernamePassword&lt;&#x2F;code&gt; encryption scheme is a combination
+of an encrypted header format, and symmetric AEAD cypher. Changing the
+header format should be possible. Changing the internal symmetric keys
+makes all data inaccessible.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;code&gt;ChangeHeaderKey&lt;&#x2F;code&gt; uses generics enforce the rules.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;ChangeHeaderKey&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;H, N, I&amp;gt; {
+&lt;&#x2F;span&gt;&lt;span&gt;    opener&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;: &lt;&#x2F;span&gt;&lt;span&gt;Arc&amp;lt;H&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    sealer&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;: &lt;&#x2F;span&gt;&lt;span&gt;Arc&amp;lt;N&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    convergence&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; I,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;impl&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;H, N, I&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;ChangeHeaderKey&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;H, N, I&amp;gt; {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;swap_on_seal&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;original&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;: &lt;&#x2F;span&gt;&lt;span&gt;KeyingScheme&amp;lt;H, I&amp;gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;new&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;: &lt;&#x2F;span&gt;&lt;span&gt;KeyingScheme&amp;lt;N, I&amp;gt;) &lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;-&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;Self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;            opener&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; original&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;header&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            sealer&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; new&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;header&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            convergence&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; original&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;convergence&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        }
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;So far, this has scaled well enough for the current encryption schemes
+in &lt;code&gt;infinitree&lt;&#x2F;code&gt;, and, since I am not planning on many new features
+here, it will probably stick around for some time.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;wiring-up-the-command-line-with-clap&quot;&gt;Wiring up the command line with &lt;code&gt;clap&lt;&#x2F;code&gt;&lt;&#x2F;h2&gt;
+&lt;p&gt;First of all, if you&#x27;ve made it this far, congratulations. You deserve
+a &lt;a href=&quot;https:&#x2F;&#x2F;youtu.be&#x2F;X3uKmTdgmQg?t=136&quot;&gt;break&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;All this nonsense in &lt;code&gt;infinitree&lt;&#x2F;code&gt; is there to make
+&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;symmetree-labs&#x2F;zerostash&#x2F;releases&#x2F;tag&#x2F;v0.5.0&quot;&gt;Zerostash&lt;&#x2F;a&gt;
+support some fancy modes of storage, that we need to expose on the
+CLI.&lt;&#x2F;p&gt;
+&lt;p&gt;Clap&#x27;s declarative mode is amazing. Zerostash supports mostly the same
+stuff in the TOML-based configuration language and the command line.&lt;&#x2F;p&gt;
+&lt;p&gt;Compare and contrast.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;toml&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-toml &quot;&gt;&lt;code class=&quot;language-toml&quot; data-lang=&quot;toml&quot;&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;stash&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;s3&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;key&lt;&#x2F;span&gt;&lt;span&gt;]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;source &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;plaintext&amp;quot;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;user &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;backup@road-warrior&amp;quot;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;password &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;a very secure password&amp;quot;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;stash&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;s3&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;backend&lt;&#x2F;span&gt;&lt;span&gt;]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;type &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;s3&amp;quot;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;bucket &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;laptop-backup&amp;quot;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;region &lt;&#x2F;span&gt;&lt;span&gt;= { &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;name &lt;&#x2F;span&gt;&lt;span&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;us-east-1&amp;quot; &lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;keys &lt;&#x2F;span&gt;&lt;span&gt;= [&lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;access_key&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;secret_key&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;]
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;pre style=&quot;background-color:#fafafa;color:#61676c;&quot;&gt;&lt;code&gt;&lt;span&gt;0s commit --user backup@road-warrior s3:&#x2F;&#x2F;access_key:secret_key@us-east-1#&#x2F;bucket&#x2F;path &#x2F;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Ok, you can&#x27;t specify the password on the command line, but apart from
+that, it&#x27;s pretty much the same.&lt;&#x2F;p&gt;
+&lt;p&gt;The trick is that both of the above examples are translated into a
+symbolic representation of the configuration of a stash.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Default&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; Clone&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; Debug&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; Deserialize&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; Serialize)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;Stash &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;key&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; Key,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;backend&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; Backend,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;alias&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; String,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;And, it&#x27;s symbolic all the way down, including the &lt;code&gt;Key&lt;&#x2F;code&gt; and &lt;code&gt;Backend&lt;&#x2F;code&gt; enums. To create a &lt;code&gt;Stash&lt;&#x2F;code&gt; instance, we&#x27;re either directly deserializing it from TOML, or we leverage the &lt;code&gt;clap&lt;&#x2F;code&gt; arguments we can include anywhere that will generate a Stash instance for us.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(clap::Args&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; Clone&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; Debug)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;clap&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;group&lt;&#x2F;span&gt;&lt;span&gt;(
+&lt;&#x2F;span&gt;&lt;span&gt;            ArgGroup::&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;new&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;key&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)
+&lt;&#x2F;span&gt;&lt;span&gt;                .&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;args&lt;&#x2F;span&gt;&lt;span&gt;(&amp;amp;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;keyfile&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;keystring&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;yubikey&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;])&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        ))]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;StashArgs &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;stash&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; String,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;clap&lt;&#x2F;span&gt;&lt;span&gt;(flatten)]
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;symmetric_key&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; SymmetricKey,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;clap&lt;&#x2F;span&gt;&lt;span&gt;(short&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; long&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; value_name &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;PATH&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)]
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;keyfile&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;Option&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;PathBuf&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;clap&lt;&#x2F;span&gt;&lt;span&gt;(short &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; &amp;#39;K&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; value_name &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;TOML&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; long)]
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;keystring&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;Option&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;String&lt;&#x2F;span&gt;&lt;span&gt;&amp;gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;clap&lt;&#x2F;span&gt;&lt;span&gt;(short&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; long)]
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;yubikey&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;bool&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;All of this will help Zerostash figure out which keys to use, and how
+to turn your command line into a symbolic &lt;code&gt;Stash&lt;&#x2F;code&gt;. All this stays
+symbolic until Zerostash opens the &lt;code&gt;Stash&lt;&#x2F;code&gt; when everything is
+evaluated and turned into &lt;code&gt;infinitree&lt;&#x2F;code&gt; types, and Zerostash can start
+using the &lt;code&gt;Infinitree&lt;&#x2F;code&gt; database instance.&lt;&#x2F;p&gt;
+&lt;p&gt;To change the key of a stash, we need to define the &lt;code&gt;change&lt;&#x2F;code&gt; subcommand:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Command&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; Debug)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;Change &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;clap&lt;&#x2F;span&gt;&lt;span&gt;(flatten)]
+&lt;&#x2F;span&gt;&lt;span&gt;    from&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; StashArgs,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;clap&lt;&#x2F;span&gt;&lt;span&gt;(subcommand)]
+&lt;&#x2F;span&gt;&lt;span&gt;    cmd&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; ChangeCmd,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Through a bunch of new &lt;code&gt;clap::Args&lt;&#x2F;code&gt; annotations and getting gradually
+more specific in how and why we want to change things, we get lost in
+the details, such as &lt;code&gt;ChangeCmd&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;One big down side of the declarative &lt;code&gt;clap&lt;&#x2F;code&gt; code, is that for complex
+interfaces, you&#x27;ll have a type for &lt;em&gt;everything&lt;&#x2F;em&gt;. And in case you want
+to re-use a subcommand &lt;em&gt;slightly&lt;&#x2F;em&gt; differently, you&#x27;ll need to break
+out different uses in different places to different structs.&lt;&#x2F;p&gt;
+&lt;p&gt;I&#x27;m not saying this is pretty. This gets tedious, and you have to be
+patient.&lt;&#x2F;p&gt;
+&lt;p&gt;But to cut to the chase, eventually, we want to run &lt;a href=&quot;https:&#x2F;&#x2F;symmetree.dev&#x2F;blog&#x2F;04-api-to-cli&#x2F;#the-code&quot;&gt;the
+code&lt;&#x2F;a&gt;. Once we distill the command line options to usable
+&lt;code&gt;Key&lt;&#x2F;code&gt; instances, eventually we need to go through the variants of the
+&lt;code&gt;Key&lt;&#x2F;code&gt; &lt;code&gt;enum&lt;&#x2F;code&gt; to map everything into specific types. There&#x27;s a helper
+trait that allows the different supported keying schemes to turn into
+a specific &lt;code&gt;infinitree::Key&lt;&#x2F;code&gt; instance.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub trait &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;KeyToSource &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;type &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;Target&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;to_keysource&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;_stash_name&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;str&lt;&#x2F;span&gt;&lt;span&gt;) &lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;-&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;Result&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;Self&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;Target&amp;gt;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;And then we end up executing the symbolic &lt;code&gt;Key&lt;&#x2F;code&gt; configuration to
+create a &lt;code&gt;ChangeHeaderKey&lt;&#x2F;code&gt; instance, and elide the type. There are a
+few helper macros to help reduce noise, which is considerable, but in
+the end, it seems to be necessary to create a huge &lt;code&gt;match&lt;&#x2F;code&gt; block that
+maps out the valid transitions.&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;macro_rules! &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;change_key &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;    (&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;$stash&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;ident&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;$old&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;expr&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;$new&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;expr&lt;&#x2F;span&gt;&lt;span&gt;) &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;=&amp;gt; &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;        Arc&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;new(infinitree&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;crypto&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;ChangeHeaderKey&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;swap_on_seal(
+&lt;&#x2F;span&gt;&lt;span&gt;            $old&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;to_keysource&lt;&#x2F;span&gt;&lt;span&gt;($stash)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;?&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            $new&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;to_keysource&lt;&#x2F;span&gt;&lt;span&gt;($stash)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;?&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        ))
+&lt;&#x2F;span&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;impl &lt;&#x2F;span&gt;&lt;span&gt;KeyToSource &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;for &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;Key &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;type &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;Target &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span&gt;infinitree&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;Key&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;fn &lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;to_keysource&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ff8f40;&quot;&gt;stash&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;str&lt;&#x2F;span&gt;&lt;span&gt;) &lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;-&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;Result&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;infinitree&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;Key&amp;gt; {
+&lt;&#x2F;span&gt;&lt;span&gt;        &lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;Ok&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;match &lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;self &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;		    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;...
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;            &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;Self&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;ChangeTo { old&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; new } &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;=&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;match &lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;*&lt;&#x2F;span&gt;&lt;span&gt;old&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;*&lt;&#x2F;span&gt;&lt;span&gt;new) {
+&lt;&#x2F;span&gt;&lt;span&gt;                (Key&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;Interactive&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;, &lt;&#x2F;span&gt;&lt;span&gt;Key&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;Interactive) &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;=&amp;gt; &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;                    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;change_key!&lt;&#x2F;span&gt;&lt;span&gt;(stash&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;old!&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;new!&lt;&#x2F;span&gt;&lt;span&gt;())
+&lt;&#x2F;span&gt;&lt;span&gt;                }
+&lt;&#x2F;span&gt;&lt;span&gt;                (Key&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;Interactive&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;, &lt;&#x2F;span&gt;&lt;span&gt;Key&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;Userpass(new)) &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;=&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;change_key!&lt;&#x2F;span&gt;&lt;span&gt;(stash&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;old!&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; new)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;				
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;...
+&lt;&#x2F;span&gt;&lt;span&gt;                Map out all valid transitions&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;...
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;...
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;                &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;_ =&amp;gt; &lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;bail!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;Old and new keys are incompatible!&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;            }&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;        })
+&lt;&#x2F;span&gt;&lt;span&gt;    }
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;This &lt;code&gt;infinitree::Key&lt;&#x2F;code&gt; instance can then be used to open and reseal a stash:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;let mut&lt;&#x2F;span&gt;&lt;span&gt; stash &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt; stash_cfg&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;try_open&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;Some&lt;&#x2F;span&gt;&lt;span&gt;(key))&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;expect&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;Stash cannot be opened&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;if&lt;&#x2F;span&gt;&lt;span&gt; stash&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;reseal&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;is_err&lt;&#x2F;span&gt;&lt;span&gt;() {
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#f07171;&quot;&gt;fatal_error&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#86b300;&quot;&gt;&amp;quot;Failed to change key&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;And the password has been changed!&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;conclusion&quot;&gt;Conclusion&lt;&#x2F;h2&gt;
+&lt;p&gt;Thanks for sticking around for this long. My key takeaway is that
+Rust helps enormously to control the complexity that arises when we
+move from the string-heavy CLI interface to a strict API boundary.&lt;&#x2F;p&gt;
+&lt;p&gt;None of it is magic, though, and there is a considerable amount of
+work involved in mapping out a large suite of CLI functions,
+considering all the externalities a CLI program has to consider, even
+if it all condenses down to a fairly narrow API surface that in turn
+hides the inner complexities of key management.&lt;&#x2F;p&gt;
+&lt;p&gt;Although &lt;code&gt;clap&lt;&#x2F;code&gt;&#x27;s declarative style helps a lot keeping all the functionality
+explicit, there is a considerable amount of type noise by making
+all uses of the &lt;em&gt;similar but not quite the same&lt;&#x2F;em&gt; configurations mapped
+into something specific.&lt;&#x2F;p&gt;
+&lt;p&gt;The robustness of building around the explicit types might be worth
+it, as most of the connections are explicitly checked, and chaining
+the flow and dependencies is easy to track for the different functions
+exposed by the CLI.&lt;&#x2F;p&gt;
+&lt;p&gt;Happy hacking!&lt;&#x2F;p&gt;
+</content>
+	</entry>
+	<entry xml:lang="en">
+		<title>Hardware and asymmetry: what&#x27;s new in Zerostash 0.5</title>
+		<published>2022-07-26T00:00:00+00:00</published>
+		<updated>2022-07-26T00:00:00+00:00</updated>
+		<link href="https://symmetree.dev/blog/03-hardware-and-asymmetry-05/" type="text/html"/>
+		<id>https://symmetree.dev/blog/03-hardware-and-asymmetry-05/</id>
+		<content type="html">&lt;p&gt;0.5 is a huge milestone for Zerostash, paving the way for some long-term plans, including truly write-only backups. With 0.5, we&#x27;re half-way there to truly ransomware-resistant backups. In this process, Zerostash 0.5 will also transparently upgrade your existing archives to a more robust encryption scheme that mitigates nonce-reuse and potential &lt;a href=&quot;https:&#x2F;&#x2F;eprint.iacr.org&#x2F;2020&#x2F;1491.pdf&quot;&gt;partitioning oracle attacks&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;h1 id=&quot;write-only-archives&quot;&gt;Write-only archives&lt;&#x2F;h1&gt;
+&lt;p&gt;With Zerostash 0.5 you can create a write-only archive on an ordinary storage. While this mode is not useful against an attacker destroying your backups, it will help you make sure they can&#x27;t read the archive contents without the correct keys. Note that the index is still accessible using your symmetric password, so they&#x27;ll see all the file names, but not the contents.&lt;&#x2F;p&gt;
+&lt;p&gt;This is how you do back up your entire &lt;code&gt;&#x2F;&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#fafafa;color:#61676c;&quot;&gt;&lt;code&gt;&lt;span&gt;0s keys gen &#x2F;path&#x2F;to&#x2F;stash split_key --user server_backup@symmetree.dev \
+&lt;&#x2F;span&gt;&lt;span&gt;                                     --read-keyfile ~&#x2F;read_key.toml \
+&lt;&#x2F;span&gt;&lt;span&gt;                                     --write-keyfile ~&#x2F;write_key.toml
+&lt;&#x2F;span&gt;&lt;span&gt;0s commit --keyfile ~&#x2F;write.key.toml &#x2F;path&#x2F;to&#x2F;stash &#x2F;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;h1 id=&quot;hardware-based-encryption-with-yubikeys&quot;&gt;Hardware-based encryption with Yubikeys&lt;&#x2F;h1&gt;
+&lt;p&gt;Road warriors will appreciate that there&#x27;s now a way to give a bit more of a personal touch to their backups. A Yubikey configured to perform Challenge-Response HMAC-SHA1 operations &lt;em&gt;can&lt;&#x2F;em&gt; require a touch to decrypt then re-seal the archive. Using challenge-response mode also allows you to easily create a backup Yubikey.&lt;&#x2F;p&gt;
+&lt;p&gt;Note, that if you decide that touch is what you want, you will need to pay attention to when &lt;code&gt;0s&lt;&#x2F;code&gt; finishes crunching your data, and seals the stash. To set up the Yubikey, consult the &lt;a href=&quot;https:&#x2F;&#x2F;strongbox.reamaze.com&#x2F;kb&#x2F;yubikey&#x2F;how-do-i-create-a-yubikey-protected&quot;&gt;amazing documentation&lt;&#x2F;a&gt; by Strongbox. If you just wanted to create an archive of your user directory on an external disk, this is how you do it:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#fafafa;color:#61676c;&quot;&gt;&lt;code&gt;&lt;span&gt;0s commit --yubikey &#x2F;mnt&#x2F;path&#x2F;to&#x2F;stash &#x2F;home&#x2F;user
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Depending on your preferences, you may want to create a keyfile:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#fafafa;color:#61676c;&quot;&gt;&lt;code&gt;&lt;span&gt;0s keys gen &#x2F;mnt&#x2F;path&#x2F;to&#x2F;stash yubikey slot2 hmac1 --user road_warrior@symmetree.dev --keyfile home_backup.toml 
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;h1 id=&quot;hardware-security-with-macos-keychain&quot;&gt;Hardware security with macOS Keychain&lt;&#x2F;h1&gt;
+&lt;p&gt;macOS users will appreciate that they can configure Keychain to store their passwords. On modern mac laptops, this means your Zerostash credentials are protected by the Secure Enclave. You can use this feature in conjunction with your Yubikey or &lt;code&gt;split_key&lt;&#x2F;code&gt; keys, too. If you&#x27;re adventurous, synchronizing your Keychain with your iCloud account will enable access to your stashes on other fruity devices.&lt;&#x2F;p&gt;
+&lt;p&gt;To generate a keyfile with Yubikey that picks your password from Keychain:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#fafafa;color:#61676c;&quot;&gt;&lt;code&gt;&lt;span&gt;0s keys gen &#x2F;mnt&#x2F;path&#x2F;to&#x2F;stash yubikey --keychain --keyfile home_backup.toml
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;To simply run a backup and save the password to Keychain:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#fafafa;color:#61676c;&quot;&gt;&lt;code&gt;&lt;span&gt;0s keys commit --keychain --user home_backup@symmetree.dev &#x2F;mnt&#x2F;path&#x2F;to&#x2F;stash &#x2F;home&#x2F;user
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;h1 id=&quot;changing-password&quot;&gt;Changing password&lt;&#x2F;h1&gt;
+&lt;p&gt;Up until now, there was now way to change the password of a stash once you create it. This has now &lt;em&gt;changed&lt;&#x2F;em&gt;. Right this way, please:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#fafafa;color:#61676c;&quot;&gt;&lt;code&gt;&lt;span&gt;0s keys change &#x2F;path&#x2F;to&#x2F;stash toml --keyfile home_backup.toml
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;To explore the full suite of new key operations, you can always consult the helpdesk:&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#fafafa;color:#61676c;&quot;&gt;&lt;code&gt;&lt;span&gt;0s keys --help
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;h1 id=&quot;i-want-to-try-this-right-now&quot;&gt;I want to try this, right now!&lt;&#x2F;h1&gt;
+&lt;p&gt;That&#x27;s good to hear. You can access the binaries for Linux, Windows, and macOS straight from the &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;symmetree-labs&#x2F;zerostash&#x2F;releases&#x2F;tag&#x2F;v0.5.0&quot;&gt;GitHub release&lt;&#x2F;a&gt;. You can also use &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;symmetree-labs&#x2F;homebrew-tap&quot;&gt;Homebrew&lt;&#x2F;a&gt; and &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;symmetree-labs&#x2F;zerostash#installation-on-nixos&quot;&gt;Nix&lt;&#x2F;a&gt; to install a packaged version in your system!&lt;&#x2F;p&gt;
+&lt;p&gt;Have fun, and happy hacking!&lt;&#x2F;p&gt;
+</content>
+	</entry>
+	<entry xml:lang="en">
+		<title>Stash, Cache, and Keys: Anatomy of Encrypted Storage</title>
+		<published>2022-06-08T00:00:00+00:00</published>
+		<updated>2022-06-08T00:00:00+00:00</updated>
+		<link href="https://symmetree.dev/blog/02-anatomy-of-encrypted-storage/" type="text/html"/>
+		<id>https://symmetree.dev/blog/02-anatomy-of-encrypted-storage/</id>
+		<content type="html">&lt;p&gt;If you have tuned into our &lt;a href=&quot;&#x2F;blog&#x2F;01-serious-backups&quot;&gt;pilot episode&lt;&#x2F;a&gt;,
+you should have gotten a glimpse of the issues I see in the current
+landscape of secure archiving tools, and &lt;em&gt;what&lt;&#x2F;em&gt; a new tool should
+do. I, however, never elaborated on &lt;em&gt;how&lt;&#x2F;em&gt; that would happen. &lt;&#x2F;p&gt;
+&lt;p&gt;The &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;symmetree-labs&#x2F;zerostash&#x2F;releases&#x2F;tag&#x2F;v0.4.1&quot;&gt;last release of
+Zerostash&lt;&#x2F;a&gt;
+now supports local caching of archives, S3 remotes, and natively using
+macOS Keychain and keyfiles to store credentials. This provides great
+apropo for me to elaborate on what makes this possible.&lt;&#x2F;p&gt;
+&lt;p&gt;This is a long read, so buckle up, get a beverage, and put on your
+monocle.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;where-we-re-going&quot;&gt;Where We&#x27;re Going&lt;&#x2F;h2&gt;
+&lt;p&gt;For those of you who have missed our previous programming (the British
+programming, where they talk about the telly), Zerostash is solving
+the following technical problems:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Store large amounts of files securely in random access archives.&lt;&#x2F;li&gt;
+&lt;li&gt;Do not leak metadata like archive or file size.&lt;&#x2F;li&gt;
+&lt;li&gt;Do not require extra server software apart from file storage.&lt;&#x2F;li&gt;
+&lt;li&gt;The archives should be cheap to replicate, synchronize.&lt;&#x2F;li&gt;
+&lt;li&gt;Store only incremental changes.&lt;&#x2F;li&gt;
+&lt;li&gt;Stay as fast as possible for most use cases.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;Ok, this (sorta) makes sense, but &lt;em&gt;&amp;quot;most use cases&amp;quot;&lt;&#x2F;em&gt; definitely sounds
+like a thing to noodle on a bit more.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;most-use-cases&quot;&gt;Most Use Cases&lt;&#x2F;h2&gt;
+&lt;p&gt;Covering or even identifying every use case is hard, because everybody
+wants to do backups differently.&lt;&#x2F;p&gt;
+&lt;p&gt;Some people will want to create a snapshot of their current work
+environment, and occasionally send that off to their local or cloud
+storage. Some will use hard drives and put them in a safe. Some will
+use a combination of both. Some are afraid of Mossad, others are
+afraid of &lt;a href=&quot;https:&#x2F;&#x2F;www.usenix.org&#x2F;system&#x2F;files&#x2F;1401_08-12_mickens.pdf&quot;&gt;Not
+Mossad&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;div class=&quot;m-paragraph&quot;&gt;
+&lt;div class=&quot;float-left w-50&quot;&gt;
+In addition, people are not only doing backups. Activists,
+journalists, and researchers will want to preserve or, occasionally,
+share stashes of documents with others securely without using
+excessive bandwidth.
+&lt;&#x2F;div&gt;
+&lt;div class=&quot;float-right w-25 p-10&quot;&gt;
+&lt;img src=&quot;&#x2F;02-anatomy-of-encrypted-storage&#x2F;use-cases.svg&quot;&gt;
+&lt;&#x2F;div&gt;
+&lt;&#x2F;div&gt;
+&lt;p&gt;To add extra complexity, all platforms now ship their own cloud
+storage solutions built-in and ready to go. The common thing among
+them is that neither of these services actually hide the data from the
+storage provider. Yet, UX integration expectations from users are
+high, the lines between local and remote are intentionally blurred by
+operating system vendors.&lt;&#x2F;p&gt;
+&lt;p&gt;It would be great if we could engineer a solution that does it all.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;physical-layout&quot;&gt;Physical Layout&lt;&#x2F;h2&gt;
+&lt;p&gt;What we should be aiming for then, seems like a sort of overlay file
+system that&#x27;s versatile enough to be used across all operating
+systems, and as a core for different applications.&lt;&#x2F;p&gt;
+&lt;p&gt;To circumvent the latency implications of dealing with a lot of files,
+stemming mostly from syscall overhead and round trip times in a
+networked environment, we&#x27;re going to need some packing.&lt;&#x2F;p&gt;
+&lt;p&gt;Zerostash packs ChaCha20-Poly1305 encrypted chunks of data in 4MiB
+objects. These chunks use convergent encryption, which means the same
+cleartext will encrypt to the same cyphertext within the same
+stash. Chunks can be part of a file, or some serialized data structure
+that helps us index all the content in the stash. But let&#x27;s not jump
+ahead.&lt;&#x2F;p&gt;
+&lt;img class=&quot;centered w-50 m-paragraph&quot; src=&quot;&#x2F;02-anatomy-of-encrypted-storage&#x2F;object-layout.svg&quot;&gt;
+&lt;p&gt;Why 4MiB? It&#x27;s fast enough to transfer on most internet connections,
+after all &lt;a href=&quot;https:&#x2F;&#x2F;httparchive.org&#x2F;reports&#x2F;page-weight?lens=top1m&amp;amp;start=2017_08_01&amp;amp;end=latest&amp;amp;view=list&quot;&gt;many
+websites&lt;&#x2F;a&gt;
+are &lt;a href=&quot;https:&#x2F;&#x2F;idlewords.com&#x2F;talks&#x2F;website_obesity.htm&quot;&gt;larger than
+that&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;Additionally, most modern SSDs will use a block size of &lt;a href=&quot;https:&#x2F;&#x2F;spdk.io&#x2F;doc&#x2F;ssd_internals.html&quot;&gt;a few
+megabytes&lt;&#x2F;a&gt;, which means
+handing round sized &lt;code&gt;write()&lt;&#x2F;code&gt; calls to the controller (through the
+filesystem) will &lt;em&gt;theoretically&lt;&#x2F;em&gt; give us aligned access and better
+performance.&lt;&#x2F;p&gt;
+&lt;p&gt;If there isn&#x27;t 4MiB worth of chunks in an object, Zerostash will fill
+the unused segments with random, creating purple 4MiB blobs that look
+indistinguishable from &lt;code&gt;&#x2F;dev&#x2F;urandom&lt;&#x2F;code&gt; output.&lt;&#x2F;p&gt;
+&lt;pre style=&quot;background-color:#fafafa;color:#61676c;&quot;&gt;&lt;code&gt;&lt;span&gt;; ent ~&#x2F;Code&#x2F;repo&#x2F;1deb3559bd4d50571348fcae36c4f48cb4aad9e7a834e6449a7daced258ffa59
+&lt;&#x2F;span&gt;&lt;span&gt;Entropy = 7.999959 bits per byte.
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;Optimum compression would reduce the size
+&lt;&#x2F;span&gt;&lt;span&gt;of this 4194304 byte file by 0 percent.
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;Chi square distribution for 4194304 samples is 237.60, and randomly
+&lt;&#x2F;span&gt;&lt;span&gt;would exceed this value 77.61 percent of the times.
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span&gt;Arithmetic mean value of data bytes is 127.4687 (127.5 = random).
+&lt;&#x2F;span&gt;&lt;span&gt;Monte Carlo value for Pi is 3.141657964 (error 0.00 percent).
+&lt;&#x2F;span&gt;&lt;span&gt;Serial correlation coefficient is 0.000192 (totally uncorrelated = 0.0).
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Yes, my prompt starts with &lt;code&gt;;&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;Objects also have an ID, so we know how to call them. This ID serves
+no real purpose, in the sense that it doesn&#x27;t validate the integrity
+of the object. It is just more random-looking bytes.&lt;&#x2F;p&gt;
+&lt;p&gt;The ID needs to be some random value, because we want to be able to
+rewrite &lt;em&gt;some&lt;&#x2F;em&gt; of the objects without changing their ID. Why would we
+do that? Because specialized servers belong in Michelin-star
+restaurants.&lt;&#x2F;p&gt;
+&lt;p&gt;This object size and naming convention helps us synchronize partial
+updates to the archive, regardless of the underlying file system,
+syncing mechanism, or storage backend, while maintaining a relatively
+decent throughput&#x2F;latency tradeoff.&lt;&#x2F;p&gt;
+&lt;p&gt;Detecting changes to an object is as simple as looking at the
+modification time. Extra objects can be added or removed based on
+comparison of file listings.&lt;&#x2F;p&gt;
+&lt;p&gt;Simple enough? Sure, let&#x27;s see how to fill all this random with useful
+stuff.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;bootstrapping-to-infinity&quot;&gt;Bootstrapping to Infinity&lt;&#x2F;h2&gt;
+&lt;p&gt;At the core of Zerostash is a library called
+&lt;a href=&quot;https:&#x2F;&#x2F;docs.rs&#x2F;infinitree&#x2F;latest&#x2F;infinitree&#x2F;&quot;&gt;Infinitree&lt;&#x2F;a&gt; to
+handle... infinite trees.&lt;&#x2F;p&gt;
+&lt;p&gt;In fact, Infinitree handles all the storage-y stuff described above,
+and allows Zerostash to use a high-level API for its model like this:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;type &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;ChunkIndex &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span&gt;fields&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;VersionedMap&amp;lt;Digest, ChunkPointer&amp;gt;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;type &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;FileIndex &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span&gt;fields&lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;::&lt;&#x2F;span&gt;&lt;span&gt;VersionedMap&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;String&lt;&#x2F;span&gt;&lt;span&gt;, Entry&amp;gt;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;#&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color:#f29718;&quot;&gt;derive&lt;&#x2F;span&gt;&lt;span&gt;(Clone&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; Default&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; Index)]
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;Files &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;chunks&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; ChunkIndex,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;files&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; FileIndex,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;So how, exactly, do we reach &lt;code&gt;ChunkIndex&lt;&#x2F;code&gt; and &lt;code&gt;FileIndex&lt;&#x2F;code&gt; from our
+encrypted chunks sitting in randomly named objects?&lt;&#x2F;p&gt;
+&lt;p&gt;Well, remember when I said random IDs serve no purpose? I lied. They
+actually serve the purpose of hiding the root of the tree itself.
+This is what happens when we open a tree:&lt;&#x2F;p&gt;
+&lt;img class=&quot;centered w-75 m-paragraph&quot; src=&quot;&#x2F;02-anatomy-of-encrypted-storage&#x2F;key-derivation.svg&quot;&gt;
+&lt;p&gt;The name of the root object is derived from the user password, along
+with the encryption keys. Specifically, the output of an Argon2 KDF is
+used to derive &lt;a href=&quot;https:&#x2F;&#x2F;docs.rs&#x2F;blake3&#x2F;latest&#x2F;blake3&#x2F;fn.derive_key.html&quot;&gt;Blake3
+subkeys&lt;&#x2F;a&gt;
+for &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;symmetree-labs&#x2F;infinitree&#x2F;blob&#x2F;b962de0775b68d69c53065bc22f09fb85612edc3&#x2F;infinitree&#x2F;src&#x2F;crypto.rs#L79-L92&quot;&gt;various purposes&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;The root object also has a special twist: it has a 512 byte header.
+In Infinitree 0.8, the header is a simple &lt;code&gt;ChunkPointer&lt;&#x2F;code&gt; that looks like this:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;crate&lt;&#x2F;span&gt;&lt;span&gt;) &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;struct &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;RawChunkPointer &lt;&#x2F;span&gt;&lt;span&gt;{
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;offs&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;u32&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;size&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;u32&lt;&#x2F;span&gt;&lt;span&gt;,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;file&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; ObjectId,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;hash&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; Digest,
+&lt;&#x2F;span&gt;&lt;span&gt;    &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub &lt;&#x2F;span&gt;&lt;span&gt;tag&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; Tag,
+&lt;&#x2F;span&gt;&lt;span&gt;}
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;This root chunk pointer is contains all the information required for
+us to get to the next chunk, which contains a list of chunk pointers
+we call a &lt;code&gt;Stream&lt;&#x2F;code&gt;:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub struct &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;Stream&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;Vec&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;ChunkPointer&amp;gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Reading through the chunks in the &lt;code&gt;Stream&lt;&#x2F;code&gt; will allow us to decrypt
+the transaction list, which in turn allows us to select a version to
+restore into memory, through, you guessed it, more &lt;code&gt;Stream&lt;&#x2F;code&gt;s and
+&lt;code&gt;ChunkPointer&lt;&#x2F;code&gt;s. In the code example above, the &lt;code&gt;VersionedMap&lt;&#x2F;code&gt;s are
+responsible for dumping and restoring their state from &lt;code&gt;Stream&lt;&#x2F;code&gt;s.&lt;&#x2F;p&gt;
+&lt;p&gt;The transaction list looks like this:&lt;&#x2F;p&gt;
+&lt;pre data-lang=&quot;rust&quot; style=&quot;background-color:#fafafa;color:#61676c;&quot; class=&quot;language-rust &quot;&gt;&lt;code class=&quot;language-rust&quot; data-lang=&quot;rust&quot;&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;crate&lt;&#x2F;span&gt;&lt;span&gt;) &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;type &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;Field &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;String&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;crate&lt;&#x2F;span&gt;&lt;span&gt;) &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;type &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;TransactionPointer &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span&gt;(CommitId&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; Field&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; Stream)&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;span&gt;
+&lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#abb0b6;&quot;&gt;&#x2F;&#x2F;&#x2F; A list of transactions, represented in order, for versions and fields
+&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;pub&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;crate&lt;&#x2F;span&gt;&lt;span&gt;) &lt;&#x2F;span&gt;&lt;span style=&quot;color:#fa6e32;&quot;&gt;type &lt;&#x2F;span&gt;&lt;span style=&quot;color:#399ee6;&quot;&gt;TransactionList &lt;&#x2F;span&gt;&lt;span style=&quot;color:#ed9366;&quot;&gt;= &lt;&#x2F;span&gt;&lt;span style=&quot;font-style:italic;color:#55b4d4;&quot;&gt;Vec&lt;&#x2F;span&gt;&lt;span&gt;&amp;lt;TransactionPointer&amp;gt;&lt;&#x2F;span&gt;&lt;span style=&quot;color:#61676ccc;&quot;&gt;;
+&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Going through the transactions belonging to a particular &lt;code&gt;Field&lt;&#x2F;code&gt; and
+&lt;code&gt;CommitId&lt;&#x2F;code&gt;, we can deserialize the contents of our &lt;code&gt;ChunkIndex&lt;&#x2F;code&gt; and
+&lt;code&gt;FileIndex&lt;&#x2F;code&gt; data structures mentioned above.&lt;&#x2F;p&gt;
+&lt;img class=&quot;centered w-75 m-paragraph&quot; src=&quot;&#x2F;02-anatomy-of-encrypted-storage&#x2F;header-to-transactions.svg&quot;&gt;
+&lt;p&gt;We can roll the transaction list up from the &lt;code&gt;CommitId&lt;&#x2F;code&gt; which we want
+to restore all the way to the root, and filter the fields we&#x27;re
+interested in.&lt;&#x2F;p&gt;
+&lt;p&gt;For instance, there&#x27;s no point restoring the full &lt;code&gt;ChunkIndex&lt;&#x2F;code&gt; if
+we&#x27;re only looking to run &lt;code&gt;0s checkout&lt;&#x2F;code&gt; on some files, since that
+field is never used. We do need it, however, when we want to stash
+more stuff in the stash with &lt;code&gt;0s commit&lt;&#x2F;code&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;As you can see above, all &lt;code&gt;ChunkPointer&lt;&#x2F;code&gt;s include a &lt;code&gt;Tag&lt;&#x2F;code&gt;, which is
+essentially the MAC of the cyphertext as generated by the
+ChaCha20-Poly1305 cypher.&lt;&#x2F;p&gt;
+&lt;p&gt;The &lt;code&gt;CommitId&lt;&#x2F;code&gt; is then generated by taking Blake3 hash of all the
+&lt;code&gt;ChunkPointer&lt;&#x2F;code&gt;s that are included in all transactions that make up a
+commit, as well as some additional metadata, such as the previous
+commit&#x27;s id, ensuring that all contents of the index are sealed. This
+is very similar to how Git handles commit hashes.&lt;&#x2F;p&gt;
+&lt;p&gt;The transaction list is rewritten in its entirety on every commit to
+save space on the storage. However, saving a new commit will always
+create at least one new 4MiB object.&lt;&#x2F;p&gt;
+&lt;p&gt;A minimum size for commits somewhat limits the utility of Zerostash
+for large numbers of small changes, but &lt;em&gt;theoretically&lt;&#x2F;em&gt; there&#x27;s
+nothing stopping the implementation to track and re-use objects based
+on utilization, or, how much useless random we put at the
+end. Tracking where each object ends, then syncing and re-syncing them
+will increase caching complexity, but potentially improves privacy by
+creating less deterministic access patterns.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;caching&quot;&gt;Caching&lt;&#x2F;h2&gt;
+&lt;p&gt;Since the files that make up the stash mostly don&#x27;t change, we can
+cache them quite efficiently.&lt;&#x2F;p&gt;
+&lt;p&gt;Better still, Zerostash always bypasses the cache to read the root
+object when opening a stash. If the remote version changed, all the
+&lt;code&gt;ChunkPointer&lt;&#x2F;code&gt;s in it &lt;em&gt;must&lt;&#x2F;em&gt; have changed, too, invalidating parts of
+the local cache.&lt;&#x2F;p&gt;
+&lt;p&gt;Warming up the cache can happen by simply re-syncing the objects
+referenced in the transaction list&#x27;s &lt;code&gt;Stream&lt;&#x2F;code&gt; descriptor based on
+their ETag, modification timestamp, or even hash if our tools support
+it.&lt;&#x2F;p&gt;
+&lt;p&gt;Currently Zerostash can maintain a least-recently-used cache of
+objects, and will evict objects to keep a fix size. However, the index
+is always kept warm in the cache, so your local cache doubles up as a
+fully functioning local repository you can write to or query.&lt;&#x2F;p&gt;
+&lt;p&gt;This also means that only a reasonably small portion of the stash
+needs to be available to add more data into it: the index. The index
+is typically less than 0.5% of the size of all data stored in the
+stash, which means using a storage backend like Amazon Glacier is just
+a matter of some medium-complexity code and a few tough decisions.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;unfinished-business&quot;&gt;Unfinished Business&lt;&#x2F;h2&gt;
+&lt;p&gt;The simple setup is, well, simple, but not without shortcomings. For
+one, changing the master password is not straightforward. It was also
+highlighted to me that this design is potentially susceptible to
+&lt;a href=&quot;https:&#x2F;&#x2F;eprint.iacr.org&#x2F;2020&#x2F;1491.pdf&quot;&gt;partitioning oracle attacks&lt;&#x2F;a&gt;,
+although the risk should be limited.&lt;&#x2F;p&gt;
+&lt;p&gt;The base object system, with a few extensions, should be able to
+underpin all sorts of user experiences. In my (admittedly not very
+scientific) experiments on an M1 Macbook Air, Zerostash can achieve
+500-1200MiB&#x2F;s when archiving, and around 6-800MiB&#x2F;s when unarchiving,
+depending on the input.&lt;&#x2F;p&gt;
+&lt;p&gt;Optimizations, features, and a more rounded user experience can be
+developed around the core that exists, and my little list of things
+that would be cool to do just keeps getting longer.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;dirty-business&quot;&gt;Dirty Business&lt;&#x2F;h2&gt;
+&lt;p&gt;If you&#x27;ve enjoyed our journey today, you may consider subscribing to
+the &lt;a href=&quot;&#x2F;atom.xml&quot;&gt;RSS feed&lt;&#x2F;a&gt; or tuning in to my idle thoughts at the
+&lt;a href=&quot;https:&#x2F;&#x2F;twitter.com&#x2F;rhapsodhy&quot;&gt;village square&lt;&#x2F;a&gt;.&lt;&#x2F;p&gt;
+&lt;p&gt;Going forward, I would love to continue working on Zerostash and the
+surrounding Rust ecosystem in a focused way, and I am looking for
+people who want to support this journey!&lt;&#x2F;p&gt;
+&lt;p&gt;If you or your organization is in need of improving your data
+management story, why not &lt;strong&gt;hire me&lt;&#x2F;strong&gt;?&lt;&#x2F;p&gt;
+&lt;p&gt;Send me an email at &lt;strong&gt;p at symmetree.dev&lt;&#x2F;strong&gt;!&lt;&#x2F;p&gt;
+</content>
+	</entry>
+	<entry xml:lang="en">
+		<title>Time to take a hard look at securing files</title>
+		<published>2022-05-16T00:00:00+00:00</published>
+		<updated>2022-05-16T00:00:00+00:00</updated>
+		<link href="https://symmetree.dev/blog/01-serious-backups/" type="text/html"/>
+		<id>https://symmetree.dev/blog/01-serious-backups/</id>
+		<content type="html">&lt;p&gt;In the past decade or so, loads of research piled into secure
+messaging, and, with the likes of the Signal protocol and its
+derivatives, the research reached mass adoption. Not only that, but we
+have a range of competing implementations that offer different privacy
+tradeoffs! &lt;a href=&quot;https:&#x2F;&#x2F;www.youtube.com&#x2F;watch?v=YyTJYI-JpHU&quot;&gt;Supergeil!&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;For some reason, the same effort has not piled into securing
+files. While we have &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;FiloSottile&#x2F;age&quot;&gt;age&lt;&#x2F;a&gt; gradually
+displacing GPG for messaging (see a pattern?), the vast majority of
+file security and backup softwares are rooted in the 90s.&lt;&#x2F;p&gt;
+&lt;p&gt;In the rest of the article I&#x27;m going to rant a bit before I arrive at
+&lt;em&gt;my&lt;&#x2F;em&gt; solution. &lt;a href=&quot;https:&#x2F;&#x2F;symmetree.dev&#x2F;blog&#x2F;01-serious-backups&#x2F;#so-how-do-we-fix-file-storage&quot;&gt;Jump ahead&lt;&#x2F;a&gt; if you&#x27;re in a
+rush.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;usable-security-or-lack-thereof&quot;&gt;Usable security (or lack thereof)&lt;&#x2F;h2&gt;
+&lt;p&gt;On the one hand, we have robust tools that have been tested and vetted
+through exposure to time, which is great! Many eyeballs make every
+usability hell shallow (or something like that).&lt;&#x2F;p&gt;
+&lt;p&gt;On the other hand, this feels backwards: people are getting top notch
+user interfaces from Silicon Valley startups and gigacorps, while they
+have to navigate archaic and arcane configurations to secure their
+academic research with VeraCrypt.&lt;&#x2F;p&gt;
+&lt;p&gt;How should anyone know whether TwoFish is a reasonable choice of
+encryption, or they need to mix it with
+&lt;a href=&quot;https:&#x2F;&#x2F;turbo.fish&#x2F;&quot;&gt;TurboFish-GUI-SIV&lt;&#x2F;a&gt; mode using &lt;a href=&quot;https:&#x2F;&#x2F;www.youtube.com&#x2F;watch?v=hkDD03yeLnU&quot;&gt;Visual
+Basic&lt;&#x2F;a&gt; to make this
+secure for their needs?&lt;&#x2F;p&gt;
+&lt;p&gt;Proprietary software for file storage is cute, but mostly built for
+the enterprise market. And let&#x27;s not delude ourselves about the
+quality of this stuff, these products are typically optimized for
+revenue over security.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;em&gt;&amp;quot;Can I still access my data trivially in 10 years time?&amp;quot;&lt;&#x2F;em&gt; is a
+question I&#x27;ve heard multiple times during my research. Some people
+I&#x27;ve spoken to specifically avoid proprietary tools because their
+longevity is questionable.&lt;&#x2F;p&gt;
+&lt;p&gt;It seems that currently we can&#x27;t have it both ways: it&#x27;s either
+secure, or usable. &lt;&#x2F;p&gt;
+&lt;h2 id=&quot;and-then-portability&quot;&gt;And then: portability.&lt;&#x2F;h2&gt;
+&lt;p&gt;Many of open source backup software are written in Python. Performance
+hit the bottle&#x27;s neck quickly and the fix was to add some C. And maybe
+do some &lt;code&gt;exec()&lt;&#x2F;code&gt; calls to a few ready-made software that&#x27;s going to
+cut down on code size. Now you need a few different package managers
+to handle the complexity.&lt;&#x2F;p&gt;
+&lt;p&gt;All of this stuff is unapologetically designed for Linux, with a
+typical Linux user in mind from the 2000s when we were all compiling
+Gentoo from &lt;code&gt;stage1&lt;&#x2F;code&gt; to achieve best in class desktop performance (we
+never did).&lt;&#x2F;p&gt;
+&lt;p&gt;Recently, I had to spend a week away from my regular desktop, with a
+Linux laptop. &lt;em&gt;&amp;quot;I have backups!&amp;quot;&lt;&#x2F;em&gt;, or so I thought. Until I realised
+it&#x27;s going to take a non-trivial amount of time to recover those from
+encrypted TimeMachine archives. It slowly sank in that my flawless
+strategy is utterly useless if I change one variable: the part of the
+computing stack that runs a browser and an Emacs, the operating
+system.&lt;&#x2F;p&gt;
+&lt;p&gt;Try using any Python open source stuff on Windows, and you&#x27;ll feel the
+pain. WSL2 is cheating, that&#x27;s a &lt;a href=&quot;https:&#x2F;&#x2F;www.youtube.com&#x2F;watch?v=dxIPcbmo1_U&quot;&gt;Linux
+system&lt;&#x2F;a&gt;!&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;and-then-performance&quot;&gt;And then: performance.&lt;&#x2F;h2&gt;
+&lt;p&gt;Needless to say, when any system depends on layers and layers of code
+and third party tools, it becomes a lot harder to tame
+performance. But things get even worse when you consider networks.&lt;&#x2F;p&gt;
+&lt;p&gt;In the past I&#x27;ve made the mistake of blindly shoveling data into a
+cloud backup provider with an open source client. I&#x27;ve even tested my
+backups! It was great. An endless pit of data on the cheap.&lt;&#x2F;p&gt;
+&lt;p&gt;That is, until I had to do a full system restore. Downloading and
+unpacking about 1TB took 3 or 4 days on a fast European Internet
+connection. That&#x27;s when I realised that while I had lots of
+&lt;em&gt;bandwidth&lt;&#x2F;em&gt;, the &lt;em&gt;latency&lt;&#x2F;em&gt; to access chunks of my data were
+horrifically slow. Welp.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;so-how-do-we-fix-file-storage&quot;&gt;So how do we fix file storage?&lt;&#x2F;h2&gt;
+&lt;p&gt;In the last year of the Before Times, I wrote a prototype of
+&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;symmetree-labs&#x2F;zerostash&quot;&gt;Zerostash&lt;&#x2F;a&gt; in Rust, with
+a few design goals in mind:&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Make it easy to re-implement in arbitrary languages&lt;&#x2F;li&gt;
+&lt;li&gt;Allow for a large number of use cases without hellish configuration&lt;&#x2F;li&gt;
+&lt;li&gt;Make it &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;symmetree-labs&#x2F;infinitree&#x2F;blob&#x2F;main&#x2F;DESIGN.md&quot;&gt;secure by default&lt;&#x2F;a&gt;&lt;&#x2F;li&gt;
+&lt;li&gt;Make it fast&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;The truth is, the original scheme sucked. Not because I messed up the
+goals, thankfully. It was an overly complex design that ultimately
+scaled badly. Many features were impossible to implement. It was
+really, very fast, though.&lt;&#x2F;p&gt;
+&lt;p&gt;So about a year ago I resigned at my dayjob, and decided spend my
+funemployed year learning how to enjoy writing software again by
+making Zerostash not suck.&lt;&#x2F;p&gt;
+&lt;p&gt;And here we are. Zerostash is now a fully usable, multiplatform,
+incremental, deduplicated backup tool that doesn&#x27;t suck (so much).&lt;&#x2F;p&gt;
+&lt;p&gt;The CLI is modelled vaguely after Git commands, since it works pretty
+similarly to Git internally. You get to &lt;code&gt;commit&lt;&#x2F;code&gt;, &lt;code&gt;checkout&lt;&#x2F;code&gt;, &lt;code&gt;ls&lt;&#x2F;code&gt;, and
+&lt;code&gt;log&lt;&#x2F;code&gt; your archives. &lt;&#x2F;p&gt;
+&lt;h2 id=&quot;where-does-a-newborn-go-from-here&quot;&gt;Where does a newborn go from here?&lt;&#x2F;h2&gt;
+&lt;p&gt;One of the aspects of
+&lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;symmetree-labs&#x2F;zerostash&quot;&gt;Zerostash&lt;&#x2F;a&gt; and the
+underlying &lt;a href=&quot;https:&#x2F;&#x2F;github.com&#x2F;symmetree-labs&#x2F;infinitree&quot;&gt;Infinitree&lt;&#x2F;a&gt;
+library that I like the most is that the design allows building a
+bunch of different user experiences around one secure core.&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;Integrate it silently into a GUI thingy? Sure.&lt;&#x2F;li&gt;
+&lt;li&gt;File systems through FUSE? Why not.&lt;&#x2F;li&gt;
+&lt;li&gt;Sync &amp;amp; restore your workspace anywhere at high speeds? Please do.&lt;&#x2F;li&gt;
+&lt;li&gt;Encrypted Git? Yes please.&lt;&#x2F;li&gt;
+&lt;li&gt;Transparently encrypt all your customer data in Amazon S3? Hell yeah.&lt;&#x2F;li&gt;
+&lt;li&gt;Store your microservice application state in the cloud before reload?
+Of course.&lt;&#x2F;li&gt;
+&lt;li&gt;Build a replicated, encrypted database to replace your SQL logic
+with native Rust iterators? Ehm, maybe...&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;In the coming weeks, I will go through some design decisions and
+solutions that went into Infinitree and Zerostash so they scale up and
+down.&lt;&#x2F;p&gt;
+&lt;p&gt;There are also a bunch of mundane things to implement, like garbage
+collection, or integrating streams into the CLI to allow ZFS piping
+snapshots into Zerostash.&lt;&#x2F;p&gt;
+&lt;h2 id=&quot;fuck-around-and-find-out&quot;&gt;Fuck around and find out&lt;&#x2F;h2&gt;
+&lt;p&gt;Going forward, I would love to continue working on Zerostash and the
+surrounding Rust ecosystem in a focused way, and I am looking for
+people who would support this journey!&lt;&#x2F;p&gt;
+&lt;p&gt;If you or your organization is in need of improving your data
+management story, why not &lt;strong&gt;hire me&lt;&#x2F;strong&gt;?&lt;&#x2F;p&gt;
+&lt;p&gt;Send me an email at &lt;strong&gt;p at symmetree.dev&lt;&#x2F;strong&gt;!&lt;&#x2F;p&gt;
+</content>
+	</entry>
+</feed>

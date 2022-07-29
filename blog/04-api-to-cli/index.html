@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Symmetree Research Labs</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <style>
+    :root {
+        /* Primary theme color */
+        --primary-color: #2F2FF4;
+        /* Primary theme text color */
+        --primary-text-color: #232246;
+        /* Primary theme link color */
+        --primary-link-color: #CA2A4C;
+        /* Secondary color: the background body color */
+        --secondary-color: #ECF0F1;
+        --secondary-text-color: #2F2FF4;
+        /* Highlight text color of table of content */
+        --toc-highlight-text-color: #d46e13;
+	--hero-background-color: #ECF0F1; 
+	--hero-text-color: #232246; 
+    }
+</style>
+
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,500,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Poppins:400,500,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/normalize.css">
+    <link rel="stylesheet" href="https://symmetree.dev/main.css">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#2f2ff4">
+    <link rel="alternate" type="application/atom+xml" title="Atom Feed" href="https://symmetree.dev/atom.xml">
+    <meta name="description" content="fast and secure storage">
+    <meta name="msapplication-TileColor" content="#ecf0f1">
+    <meta name="theme-color" content="#ffffff">
+    <meta property="twitter:site" content="@rhapsodhy">
+    <meta property="twitter:title" content="rsdy">
+    <meta property="twitter:card" content="summary">
+    <meta property="og:site_name" content="symmetree.dev">
+    <meta property="og:locale" content="en-us">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://symmetree.dev/">
+    <meta property="og:title" content="symmetree.dev">
+    
+    
+</head>
+
+<body>
+    
+
+    <header class="pos-absolute">
+        
+
+<a href="https:&#x2F;&#x2F;symmetree.dev&#x2F;">
+    <div class="logo">
+        <div alt="logo"></div>
+    </div>
+</a>
+
+<nav>
+    
+    
+
+    <a id="blog" class="nav-item" href="/blog">Blog</a>
+
+    <a class="nav-item"  href="https://symmetree.dev/atom.xml"><img class="item filter-invert" src="/rss.svg" alt="RSS feed" title="RSS feed"></a>
+    <a class="nav-item"  href="https://github.com/symmetree-labs/"><img class="item" src="/github.png" title="All the code" alt="GitHub"></a>
+    <a class="nav-item"  href="mailto:hello@symmetree.dev?subject=Hello!&body=I%20am%20getting%20in%20touch%20to%20discuss%20the%20life,%20the%20universe,%20and%20everything..."><img class="item filter-invert" src="/email.svg" alt="Get in touch!" title="Email us!"></a>
+</nav>
+
+    </header>
+
+    
+    
+
+    
+
+    <main>
+        
+        
+        
+        
+        
+        
+
+        <div class="content text">
+	  
+<h1 class="title">
+  Carrying API guarantees to the command line with Clap
+</h1>
+<p class="subtitle"><strong>2022-07-29</strong></p>
+<p>One of the primary principles of modern cryptographic design is to be
+resistant to misuse. In other words, a cryptographic primitive must
+provide interfaces that cannot be used in a way that results in a
+compromise of core security assurances.</p>
+<p>There is a very good reason people in crypto worlds, both as in
+-graphy and -currency, are enthusiastic about Rust: the type system is
+rich enough that we can make invalid states inexpressible in the code.
+This property allows a large number of assumptions to be validated at
+compile time, therefore making our runtime reasoning about the states
+in which the program <em>can</em> be much simpler.</p>
+<p>This kind of well-defined world gets much more complex to control once
+we try to expose the associated functionality on a CLI. In this fairly
+long ride, I'll do a quick introduction of how it's done in one of the
+core Rust cryptographic libraries that also underpins
+<a href="https://github.com/rustls/rustls"><code>rustls</code></a>, then dive into some
+<a href="https://github.com/symmetree-labs/zerostash">Zerostash</a> internals
+that drove the <a href="/blog/03-hardware-and-asymmetry-05/">new command line
+options</a> in 0.5.</p>
+<h2 id="communicating-intent-in-ring">Communicating intent in Ring</h2>
+<p>Take, a real life example from
+<a href="https://docs.rs/infinitree/latest/infinitree/">infinitree</a> of using
+<a href="https://github.com/briansmith/ring">ring</a>, a Rust wrapper around
+Google's <a href="https://boringssl.googlesource.com/boringssl/">BoringSSL</a>.</p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#fa6e32;">use </span><span>ring</span><span style="color:#ed9366;">::</span><span>aead</span><span style="color:#61676ccc;">;
+</span><span>
+</span><span style="color:#fa6e32;">let</span><span> key </span><span style="color:#ed9366;">=
+</span><span>        aead</span><span style="color:#ed9366;">::</span><span>UnboundKey</span><span style="color:#ed9366;">::</span><span>new(</span><span style="color:#ed9366;">&amp;</span><span>aead</span><span style="color:#ed9366;">::</span><span style="color:#ff8f40;">CHACHA20_POLY1305</span><span style="color:#61676ccc;">,</span><span> key</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">expose_secret</span><span>())</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">expect</span><span>(</span><span style="color:#86b300;">&quot;bad key&quot;</span><span>)</span><span style="color:#61676ccc;">;
+</span><span>
+</span><span style="color:#fa6e32;">let</span><span> aead </span><span style="color:#ed9366;">= </span><span>aead</span><span style="color:#ed9366;">::</span><span>LessSafeKey</span><span style="color:#ed9366;">::</span><span>new(key)</span><span style="color:#61676ccc;">;
+</span><span>
+</span><span style="color:#fa6e32;">let</span><span> nonce </span><span style="color:#ed9366;">= </span><span>{
+</span><span>    </span><span style="color:#fa6e32;">let mut</span><span> buf </span><span style="color:#ed9366;">= </span><span>Nonce</span><span style="color:#ed9366;">::</span><span>default()</span><span style="color:#61676ccc;">;
+</span><span>    buf</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">copy_from_slice</span><span>(</span><span style="color:#ed9366;">&amp;</span><span>sealed[</span><span style="color:#ff8f40;">HEADER_CYPHERTEXT</span><span style="color:#ed9366;">..</span><span>])</span><span style="color:#61676ccc;">;
+</span><span>    aead</span><span style="color:#ed9366;">::</span><span>Nonce</span><span style="color:#ed9366;">::</span><span>assume_unique_for_key(buf)
+</span><span>}</span><span style="color:#61676ccc;">;
+</span><span>
+</span><span style="color:#fa6e32;">let</span><span> decrypted </span><span style="color:#ed9366;">=</span><span> aead
+</span><span>    </span><span style="color:#ed9366;">.</span><span style="color:#f07171;">open_in_place</span><span>(nonce</span><span style="color:#61676ccc;">, </span><span>aead</span><span style="color:#ed9366;">::</span><span>Aad</span><span style="color:#ed9366;">::</span><span>empty()</span><span style="color:#61676ccc;">, </span><span style="color:#ed9366;">&amp;</span><span style="color:#fa6e32;">mut</span><span> buf[</span><span style="color:#ed9366;">..</span><span style="color:#ff8f40;">HEADER_CYPHERTEXT</span><span>])
+</span><span>    </span><span style="color:#ed9366;">.</span><span style="color:#f07171;">map_err</span><span>(CryptoError</span><span style="color:#ed9366;">::</span><span>from)</span><span style="color:#ed9366;">?</span><span style="color:#61676ccc;">;
+</span></code></pre>
+<p>There are a few things going on here, so let's go through what
+happens, piece by piece, with an attention to how the API helps
+understanding implementation.</p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span>aead</span><span style="color:#ed9366;">::</span><span>UnboundKey</span><span style="color:#ed9366;">::</span><span>new(</span><span style="color:#ed9366;">&amp;</span><span>aead</span><span style="color:#ed9366;">::</span><span style="color:#ff8f40;">CHACHA20_POLY1305</span><span style="color:#61676ccc;">,</span><span> key</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">expose_secret</span><span>())</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">expect</span><span>(</span><span style="color:#86b300;">&quot;bad key&quot;</span><span>)</span><span style="color:#61676ccc;">;
+</span></code></pre>
+<p>First off,
+<a href="https://docs.rs/ring/latest/ring/aead/struct.UnboundKey.html"><code>UnboundKey</code></a>,
+according to the docs, is a <em>&quot;An AEAD key without a designated role or
+nonce sequence.&quot;</em>. The <code>new()</code> constructor, as we're used to in Rust,
+will create us a key that is <em>not bound</em> to any nonce sequence. We
+can't, therefore accidentally use the wrong kind of key in an
+unexpected place. It's a different type.</p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span>aead</span><span style="color:#ed9366;">::</span><span>LessSafeKey</span><span style="color:#ed9366;">::</span><span>new(key)
+</span></code></pre>
+<p><code>LessSafeKey</code>? Huh? Less safe than <em>what</em>? Let's see what the
+<a href="https://www.youtube.com/watch?v=jofNR_WkoCE"><del>fox</del></a> <a href="https://docs.rs/ring/latest/ring/aead/struct.LessSafeKey.html">docs</a> say:</p>
+<blockquote>
+<p>Immutable keys for use in situations where <code>OpeningKey</code>/<code>SealingKey</code>
+and <code>NonceSequence</code> cannot reasonably be used.</p>
+<p>Prefer to use <code>OpeningKey</code>/<code>SealingKey</code> and NonceSequence when
+practical.</p>
+</blockquote>
+<p>Ah, that makes sense! There are better ways of using the API, but they
+are not always practical, so there's a <em>less safe version</em> that can be
+used more freely!</p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span>aead</span><span style="color:#ed9366;">::</span><span>Nonce</span><span style="color:#ed9366;">::</span><span>assume_unique_for_key(buf)
+</span></code></pre>
+<p>The constructor's name itself is highlighting to the API user that the
+<a href="https://www.urbandictionary.com/define.php?term=Nonce"><em>n-once</em></a>
+value must be unique. It's an important implementation
+detail, an externality that cannot be sufficiently safeguarded against
+by the type system. Even if the <code>open_in_place</code> function consumes
+<code>nonce</code>, there's no way for the type system to ensure it's globally
+unique for every use of the <code>key</code> <em>in the universe</em>.</p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span>aead</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">open_in_place</span><span>(nonce</span><span style="color:#61676ccc;">, </span><span>aead</span><span style="color:#ed9366;">::</span><span>Aad</span><span style="color:#ed9366;">::</span><span>empty()</span><span style="color:#61676ccc;">, </span><span style="color:#ed9366;">&amp;</span><span style="color:#fa6e32;">mut</span><span> buf[</span><span style="color:#ed9366;">..</span><span style="color:#ff8f40;">HEADER_CYPHERTEXT</span><span>])
+</span></code></pre>
+<p>And finally, a single glance at <code>open_in_place</code> will tell us
+everything about the data and parameters of the actual decryption
+operation.</p>
+<h2 id="controlling-the-api-complexity">Controlling the API complexity</h2>
+<p>An API that programmers use requires very different UX considerations
+from a tool on the command line. However, users of both will want most
+of the same assurances.</p>
+<p>While the underlying misuse-resistant API means it is easy to create
+an opinionated system that does The Right Thing one way, introducing a
+choice into this user experience is riddled with traps.</p>
+<p>Before <code>infinitree</code> 0.9, there was no way to change the encryption
+keys of a tree after creating it. This was a direct result of mostly
+profiler-driven development, and I kind of left it there to fix it
+later. Everything worked, and it was oh so simple!</p>
+<p>For
+<a href="https://docs.rs/infinitree/0.9.0/infinitree/crypto/index.html#changing-keys">reasons</a>,
+changing keys requires some assumptions. Establishing the API that now
+provides the right amount of flexibility, static type checking, and
+ease of use, required a few iterations.</p>
+<p>This is how one changes the password in <code>infinitree</code> 0.9, ignoring all
+the <code>use</code>s:</p>
+<p><a name="the-code"></a></p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#fa6e32;">let</span><span> key </span><span style="color:#ed9366;">= </span><span>ChangeHeaderKey</span><span style="color:#ed9366;">::</span><span>swap_on_seal(
+</span><span>    UsernamePassword</span><span style="color:#ed9366;">::</span><span>with_credentials(</span><span style="color:#86b300;">&quot;username&quot;</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">to_string</span><span>()</span><span style="color:#61676ccc;">,
+</span><span>                                       </span><span style="color:#86b300;">&quot;old_password&quot;</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">to_string</span><span>())</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">unwrap</span><span>()</span><span style="color:#61676ccc;">,
+</span><span>    UsernamePassword</span><span style="color:#ed9366;">::</span><span>with_credentials(</span><span style="color:#86b300;">&quot;username&quot;</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">to_string</span><span>()</span><span style="color:#61676ccc;">,
+</span><span>                                       </span><span style="color:#86b300;">&quot;new_password&quot;</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">to_string</span><span>())</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">unwrap</span><span>()</span><span style="color:#61676ccc;">,
+</span><span>)</span><span style="color:#61676ccc;">;
+</span><span>
+</span><span style="color:#fa6e32;">let mut</span><span> tree </span><span style="color:#ed9366;">= </span><span>Infinitree</span><span style="color:#ed9366;">::</span><span>&lt;VersionedMap&lt;</span><span style="font-style:italic;color:#55b4d4;">String</span><span>, </span><span style="font-style:italic;color:#55b4d4;">String</span><span>&gt;&gt;</span><span style="color:#ed9366;">::</span><span>open(
+</span><span>    Directory</span><span style="color:#ed9366;">::</span><span>new(</span><span style="color:#86b300;">&quot;/storage&quot;</span><span>)</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">unwrap</span><span>()</span><span style="color:#61676ccc;">,
+</span><span>    key
+</span><span>)</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">unwrap</span><span>()</span><span style="color:#61676ccc;">;
+</span><span>
+</span><span>tree</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">reseal</span><span>()</span><span style="color:#61676ccc;">;
+</span></code></pre>
+<p>Looks simple enough. It might be surprising at first that
+there's a special <code>ChangeHeaderKey</code> type instead of just <code>swap_key</code>
+for the <code>tree</code> instance.</p>
+<p>This is because under the hood, I wanted to ensure that all
+expressible key transitions are <em>safe</em>, and this is statically ensured
+by the type system.</p>
+<p>For what you see, you see, is a lie.</p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#fa6e32;">pub type </span><span style="color:#399ee6;">UsernamePassword </span><span style="color:#ed9366;">= </span><span>KeyingScheme&lt;Argon2UserPass, Symmetric&gt;</span><span style="color:#61676ccc;">;
+</span></code></pre>
+<p>Internally, the <code>UsernamePassword</code> encryption scheme is a combination
+of an encrypted header format, and symmetric AEAD cypher. Changing the
+header format should be possible. Changing the internal symmetric keys
+makes all data inaccessible.</p>
+<p><code>ChangeHeaderKey</code> uses generics enforce the rules.</p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#fa6e32;">pub struct </span><span style="color:#399ee6;">ChangeHeaderKey</span><span>&lt;H, N, I&gt; {
+</span><span>    opener</span><span style="color:#61676ccc;">: </span><span>Arc&lt;H&gt;,
+</span><span>    sealer</span><span style="color:#61676ccc;">: </span><span>Arc&lt;N&gt;,
+</span><span>    convergence</span><span style="color:#61676ccc;">:</span><span> I,
+</span><span>}
+</span><span>
+</span><span style="color:#fa6e32;">impl</span><span>&lt;H, N, I&gt; </span><span style="color:#399ee6;">ChangeHeaderKey</span><span>&lt;H, N, I&gt; {
+</span><span>    </span><span style="color:#fa6e32;">pub fn </span><span style="color:#f29718;">swap_on_seal</span><span>(</span><span style="color:#ff8f40;">original</span><span style="color:#61676ccc;">: </span><span>KeyingScheme&lt;H, I&gt;, </span><span style="color:#ff8f40;">new</span><span style="color:#61676ccc;">: </span><span>KeyingScheme&lt;N, I&gt;) </span><span style="color:#61676ccc;">-&gt; </span><span style="color:#fa6e32;">Self </span><span>{
+</span><span>        </span><span style="color:#fa6e32;">Self </span><span>{
+</span><span>            opener</span><span style="color:#61676ccc;">:</span><span> original</span><span style="color:#ed9366;">.</span><span>header</span><span style="color:#61676ccc;">,
+</span><span>            sealer</span><span style="color:#61676ccc;">:</span><span> new</span><span style="color:#ed9366;">.</span><span>header</span><span style="color:#61676ccc;">,
+</span><span>            convergence</span><span style="color:#61676ccc;">:</span><span> original</span><span style="color:#ed9366;">.</span><span>convergence</span><span style="color:#61676ccc;">,
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>So far, this has scaled well enough for the current encryption schemes
+in <code>infinitree</code>, and, since I am not planning on many new features
+here, it will probably stick around for some time.</p>
+<h2 id="wiring-up-the-command-line-with-clap">Wiring up the command line with <code>clap</code></h2>
+<p>First of all, if you've made it this far, congratulations. You deserve
+a <a href="https://youtu.be/X3uKmTdgmQg?t=136">break</a>.</p>
+<p>All this nonsense in <code>infinitree</code> is there to make
+<a href="https://github.com/symmetree-labs/zerostash/releases/tag/v0.5.0">Zerostash</a>
+support some fancy modes of storage, that we need to expose on the
+CLI.</p>
+<p>Clap's declarative mode is amazing. Zerostash supports mostly the same
+stuff in the TOML-based configuration language and the command line.</p>
+<p>Compare and contrast.</p>
+<pre data-lang="toml" style="background-color:#fafafa;color:#61676c;" class="language-toml "><code class="language-toml" data-lang="toml"><span>[</span><span style="color:#399ee6;">stash</span><span style="color:#61676ccc;">.</span><span style="color:#399ee6;">s3</span><span style="color:#61676ccc;">.</span><span style="color:#399ee6;">key</span><span>]
+</span><span style="color:#399ee6;">source </span><span>= </span><span style="color:#86b300;">&quot;plaintext&quot;
+</span><span style="color:#399ee6;">user </span><span>= </span><span style="color:#86b300;">&quot;backup@road-warrior&quot;
+</span><span style="color:#399ee6;">password </span><span>= </span><span style="color:#86b300;">&quot;a very secure password&quot;
+</span><span>
+</span><span>[</span><span style="color:#399ee6;">stash</span><span style="color:#61676ccc;">.</span><span style="color:#399ee6;">s3</span><span style="color:#61676ccc;">.</span><span style="color:#399ee6;">backend</span><span>]
+</span><span style="color:#399ee6;">type </span><span>= </span><span style="color:#86b300;">&quot;s3&quot;
+</span><span style="color:#399ee6;">bucket </span><span>= </span><span style="color:#86b300;">&quot;laptop-backup&quot;
+</span><span style="color:#399ee6;">region </span><span>= { </span><span style="color:#399ee6;">name </span><span>= </span><span style="color:#86b300;">&quot;us-east-1&quot; </span><span>}
+</span><span style="color:#399ee6;">keys </span><span>= [</span><span style="color:#86b300;">&quot;access_key&quot;</span><span style="color:#61676ccc;">, </span><span style="color:#86b300;">&quot;secret_key&quot;</span><span>]
+</span></code></pre>
+<pre style="background-color:#fafafa;color:#61676c;"><code><span>0s commit --user backup@road-warrior s3://access_key:secret_key@us-east-1#/bucket/path /
+</span></code></pre>
+<p>Ok, you can't specify the password on the command line, but apart from
+that, it's pretty much the same.</p>
+<p>The trick is that both of the above examples are translated into a
+symbolic representation of the configuration of a stash.</p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#61676ccc;">#</span><span>[</span><span style="color:#f29718;">derive</span><span>(Default</span><span style="color:#61676ccc;">,</span><span> Clone</span><span style="color:#61676ccc;">,</span><span> Debug</span><span style="color:#61676ccc;">,</span><span> Deserialize</span><span style="color:#61676ccc;">,</span><span> Serialize)]
+</span><span style="color:#fa6e32;">pub struct </span><span style="color:#399ee6;">Stash </span><span>{
+</span><span>    </span><span style="color:#fa6e32;">pub </span><span>key</span><span style="color:#61676ccc;">:</span><span> Key,
+</span><span>    </span><span style="color:#fa6e32;">pub </span><span>backend</span><span style="color:#61676ccc;">:</span><span> Backend,
+</span><span>    </span><span style="color:#fa6e32;">pub </span><span>alias</span><span style="color:#61676ccc;">:</span><span> String,
+</span><span>}
+</span></code></pre>
+<p>And, it's symbolic all the way down, including the <code>Key</code> and <code>Backend</code> enums. To create a <code>Stash</code> instance, we're either directly deserializing it from TOML, or we leverage the <code>clap</code> arguments we can include anywhere that will generate a Stash instance for us.</p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#61676ccc;">#</span><span>[</span><span style="color:#f29718;">derive</span><span>(clap::Args</span><span style="color:#61676ccc;">,</span><span> Clone</span><span style="color:#61676ccc;">,</span><span> Debug)]
+</span><span style="color:#61676ccc;">#</span><span>[</span><span style="color:#f29718;">clap</span><span>(</span><span style="color:#f29718;">group</span><span>(
+</span><span>            ArgGroup::</span><span style="color:#f29718;">new</span><span>(</span><span style="color:#86b300;">&quot;key&quot;</span><span>)
+</span><span>                .</span><span style="color:#f29718;">args</span><span>(&amp;[</span><span style="color:#86b300;">&quot;keyfile&quot;</span><span style="color:#61676ccc;">, </span><span style="color:#86b300;">&quot;keystring&quot;</span><span style="color:#61676ccc;">, </span><span style="color:#86b300;">&quot;yubikey&quot;</span><span>])</span><span style="color:#61676ccc;">,
+</span><span>        ))]
+</span><span style="color:#fa6e32;">pub struct </span><span style="color:#399ee6;">StashArgs </span><span>{
+</span><span>    </span><span style="color:#fa6e32;">pub </span><span>stash</span><span style="color:#61676ccc;">:</span><span> String,
+</span><span>    </span><span style="color:#61676ccc;">#</span><span>[</span><span style="color:#f29718;">clap</span><span>(flatten)]
+</span><span>    </span><span style="color:#fa6e32;">pub </span><span>symmetric_key</span><span style="color:#61676ccc;">:</span><span> SymmetricKey,
+</span><span>    </span><span style="color:#61676ccc;">#</span><span>[</span><span style="color:#f29718;">clap</span><span>(short</span><span style="color:#61676ccc;">,</span><span> long</span><span style="color:#61676ccc;">,</span><span> value_name </span><span style="color:#ed9366;">= </span><span style="color:#86b300;">&quot;PATH&quot;</span><span>)]
+</span><span>    </span><span style="color:#fa6e32;">pub </span><span>keyfile</span><span style="color:#61676ccc;">: </span><span style="font-style:italic;color:#55b4d4;">Option</span><span>&lt;PathBuf&gt;,
+</span><span>    </span><span style="color:#61676ccc;">#</span><span>[</span><span style="color:#f29718;">clap</span><span>(short </span><span style="color:#ed9366;">=</span><span> &#39;K&#39;</span><span style="color:#61676ccc;">,</span><span> value_name </span><span style="color:#ed9366;">= </span><span style="color:#86b300;">&quot;TOML&quot;</span><span style="color:#61676ccc;">,</span><span> long)]
+</span><span>    </span><span style="color:#fa6e32;">pub </span><span>keystring</span><span style="color:#61676ccc;">: </span><span style="font-style:italic;color:#55b4d4;">Option</span><span>&lt;</span><span style="font-style:italic;color:#55b4d4;">String</span><span>&gt;,
+</span><span>    </span><span style="color:#61676ccc;">#</span><span>[</span><span style="color:#f29718;">clap</span><span>(short</span><span style="color:#61676ccc;">,</span><span> long)]
+</span><span>    </span><span style="color:#fa6e32;">pub </span><span>yubikey</span><span style="color:#61676ccc;">: </span><span style="color:#fa6e32;">bool</span><span>,
+</span><span>}
+</span><span>
+</span></code></pre>
+<p>All of this will help Zerostash figure out which keys to use, and how
+to turn your command line into a symbolic <code>Stash</code>. All this stays
+symbolic until Zerostash opens the <code>Stash</code> when everything is
+evaluated and turned into <code>infinitree</code> types, and Zerostash can start
+using the <code>Infinitree</code> database instance.</p>
+<p>To change the key of a stash, we need to define the <code>change</code> subcommand:</p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#61676ccc;">#</span><span>[</span><span style="color:#f29718;">derive</span><span>(Command</span><span style="color:#61676ccc;">,</span><span> Debug)]
+</span><span style="color:#fa6e32;">pub struct </span><span style="color:#399ee6;">Change </span><span>{
+</span><span>    </span><span style="color:#61676ccc;">#</span><span>[</span><span style="color:#f29718;">clap</span><span>(flatten)]
+</span><span>    from</span><span style="color:#61676ccc;">:</span><span> StashArgs,
+</span><span>    </span><span style="color:#61676ccc;">#</span><span>[</span><span style="color:#f29718;">clap</span><span>(subcommand)]
+</span><span>    cmd</span><span style="color:#61676ccc;">:</span><span> ChangeCmd,
+</span><span>}
+</span></code></pre>
+<p>Through a bunch of new <code>clap::Args</code> annotations and getting gradually
+more specific in how and why we want to change things, we get lost in
+the details, such as <code>ChangeCmd</code>.</p>
+<p>One big down side of the declarative <code>clap</code> code, is that for complex
+interfaces, you'll have a type for <em>everything</em>. And in case you want
+to re-use a subcommand <em>slightly</em> differently, you'll need to break
+out different uses in different places to different structs.</p>
+<p>I'm not saying this is pretty. This gets tedious, and you have to be
+patient.</p>
+<p>But to cut to the chase, eventually, we want to run <a href="https://symmetree.dev/blog/04-api-to-cli/#the-code">the
+code</a>. Once we distill the command line options to usable
+<code>Key</code> instances, eventually we need to go through the variants of the
+<code>Key</code> <code>enum</code> to map everything into specific types. There's a helper
+trait that allows the different supported keying schemes to turn into
+a specific <code>infinitree::Key</code> instance.</p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#fa6e32;">pub trait </span><span style="color:#399ee6;">KeyToSource </span><span>{
+</span><span>    </span><span style="color:#fa6e32;">type </span><span style="color:#399ee6;">Target</span><span style="color:#61676ccc;">;
+</span><span>    </span><span style="color:#fa6e32;">fn </span><span style="color:#f29718;">to_keysource</span><span>(</span><span style="color:#ff8f40;">self</span><span>, </span><span style="color:#ff8f40;">_stash_name</span><span style="color:#61676ccc;">: </span><span style="color:#ed9366;">&amp;</span><span style="color:#fa6e32;">str</span><span>) </span><span style="color:#61676ccc;">-&gt; </span><span style="font-style:italic;color:#55b4d4;">Result</span><span>&lt;</span><span style="color:#fa6e32;">Self</span><span style="color:#ed9366;">::</span><span>Target&gt;</span><span style="color:#61676ccc;">;
+</span><span>}
+</span></code></pre>
+<p>And then we end up executing the symbolic <code>Key</code> configuration to
+create a <code>ChangeHeaderKey</code> instance, and elide the type. There are a
+few helper macros to help reduce noise, which is considerable, but in
+the end, it seems to be necessary to create a huge <code>match</code> block that
+maps out the valid transitions.</p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#f07171;">macro_rules! </span><span style="color:#399ee6;">change_key </span><span>{
+</span><span>    (</span><span style="color:#ff8f40;">$stash</span><span style="color:#61676ccc;">:</span><span style="color:#fa6e32;">ident</span><span>, </span><span style="color:#ff8f40;">$old</span><span style="color:#61676ccc;">:</span><span style="color:#fa6e32;">expr</span><span>, </span><span style="color:#ff8f40;">$new</span><span style="color:#61676ccc;">:</span><span style="color:#fa6e32;">expr</span><span>) </span><span style="color:#ed9366;">=&gt; </span><span>{
+</span><span>        Arc</span><span style="color:#ed9366;">::</span><span>new(infinitree</span><span style="color:#ed9366;">::</span><span>crypto</span><span style="color:#ed9366;">::</span><span>ChangeHeaderKey</span><span style="color:#ed9366;">::</span><span>swap_on_seal(
+</span><span>            $old</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">to_keysource</span><span>($stash)</span><span style="color:#ed9366;">?</span><span style="color:#61676ccc;">,
+</span><span>            $new</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">to_keysource</span><span>($stash)</span><span style="color:#ed9366;">?</span><span style="color:#61676ccc;">,
+</span><span>        ))
+</span><span>    }</span><span style="color:#61676ccc;">;
+</span><span>}
+</span><span>
+</span><span style="color:#fa6e32;">impl </span><span>KeyToSource </span><span style="color:#fa6e32;">for </span><span style="color:#399ee6;">Key </span><span>{
+</span><span>    </span><span style="color:#fa6e32;">type </span><span style="color:#399ee6;">Target </span><span style="color:#ed9366;">= </span><span>infinitree</span><span style="color:#ed9366;">::</span><span>Key</span><span style="color:#61676ccc;">;
+</span><span>
+</span><span>    </span><span style="color:#fa6e32;">fn </span><span style="color:#f29718;">to_keysource</span><span>(</span><span style="color:#ff8f40;">self</span><span>, </span><span style="color:#ff8f40;">stash</span><span style="color:#61676ccc;">: </span><span style="color:#ed9366;">&amp;</span><span style="color:#fa6e32;">str</span><span>) </span><span style="color:#61676ccc;">-&gt; </span><span style="font-style:italic;color:#55b4d4;">Result</span><span>&lt;infinitree</span><span style="color:#ed9366;">::</span><span>Key&gt; {
+</span><span>        </span><span style="font-style:italic;color:#55b4d4;">Ok</span><span>(</span><span style="color:#fa6e32;">match </span><span style="font-style:italic;color:#55b4d4;">self </span><span>{
+</span><span>		    </span><span style="color:#ed9366;">...
+</span><span>
+</span><span>            </span><span style="color:#fa6e32;">Self</span><span style="color:#ed9366;">::</span><span>ChangeTo { old</span><span style="color:#61676ccc;">,</span><span> new } </span><span style="color:#ed9366;">=&gt; </span><span style="color:#fa6e32;">match </span><span>(</span><span style="color:#ed9366;">*</span><span>old</span><span style="color:#61676ccc;">, </span><span style="color:#ed9366;">*</span><span>new) {
+</span><span>                (Key</span><span style="color:#ed9366;">::</span><span>Interactive</span><span style="color:#61676ccc;">, </span><span>Key</span><span style="color:#ed9366;">::</span><span>Interactive) </span><span style="color:#ed9366;">=&gt; </span><span>{
+</span><span>                    </span><span style="color:#f07171;">change_key!</span><span>(stash</span><span style="color:#61676ccc;">, </span><span style="color:#f07171;">old!</span><span>()</span><span style="color:#61676ccc;">, </span><span style="color:#f07171;">new!</span><span>())
+</span><span>                }
+</span><span>                (Key</span><span style="color:#ed9366;">::</span><span>Interactive</span><span style="color:#61676ccc;">, </span><span>Key</span><span style="color:#ed9366;">::</span><span>Userpass(new)) </span><span style="color:#ed9366;">=&gt; </span><span style="color:#f07171;">change_key!</span><span>(stash</span><span style="color:#61676ccc;">, </span><span style="color:#f07171;">old!</span><span>()</span><span style="color:#61676ccc;">,</span><span> new)</span><span style="color:#61676ccc;">,
+</span><span>				
+</span><span>                </span><span style="color:#ed9366;">...
+</span><span>                Map out all valid transitions</span><span style="color:#ed9366;">...
+</span><span>                </span><span style="color:#ed9366;">...
+</span><span>
+</span><span>                </span><span style="color:#ed9366;">_ =&gt; </span><span style="color:#f07171;">bail!</span><span>(</span><span style="color:#86b300;">&quot;Old and new keys are incompatible!&quot;</span><span>)</span><span style="color:#61676ccc;">,
+</span><span>            }</span><span style="color:#61676ccc;">,
+</span><span>        })
+</span><span>    }
+</span><span>}
+</span></code></pre>
+<p>This <code>infinitree::Key</code> instance can then be used to open and reseal a stash:</p>
+<pre data-lang="rust" style="background-color:#fafafa;color:#61676c;" class="language-rust "><code class="language-rust" data-lang="rust"><span style="color:#fa6e32;">let mut</span><span> stash </span><span style="color:#ed9366;">=</span><span> stash_cfg</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">try_open</span><span>(</span><span style="font-style:italic;color:#55b4d4;">Some</span><span>(key))</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">expect</span><span>(</span><span style="color:#86b300;">&quot;Stash cannot be opened&quot;</span><span>)</span><span style="color:#61676ccc;">;
+</span><span style="color:#fa6e32;">if</span><span> stash</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">reseal</span><span>()</span><span style="color:#ed9366;">.</span><span style="color:#f07171;">is_err</span><span>() {
+</span><span>    </span><span style="color:#f07171;">fatal_error</span><span>(</span><span style="color:#86b300;">&quot;Failed to change key&quot;</span><span>)</span><span style="color:#61676ccc;">;
+</span><span>}
+</span></code></pre>
+<p>And the password has been changed!</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>Thanks for sticking around for this long. My key takeaway is that
+Rust helps enormously to control the complexity that arises when we
+move from the string-heavy CLI interface to a strict API boundary.</p>
+<p>None of it is magic, though, and there is a considerable amount of
+work involved in mapping out a large suite of CLI functions,
+considering all the externalities a CLI program has to consider, even
+if it all condenses down to a fairly narrow API surface that in turn
+hides the inner complexities of key management.</p>
+<p>Although <code>clap</code>'s declarative style helps a lot keeping all the functionality
+explicit, there is a considerable amount of type noise by making
+all uses of the <em>similar but not quite the same</em> configurations mapped
+into something specific.</p>
+<p>The robustness of building around the explicit types might be worth
+it, as most of the connections are explicitly checked, and chaining
+the flow and dependencies is easy to track for the different functions
+exposed by the CLI.</p>
+<p>Happy hacking!</p>
+
+
+        </div>
+
+        
+        
+    </main>
+
+    
+    <footer>
+        <small class="subtext">
+            <a href="https://symmetree.dev">Symmetree Research Labs</a> © 2022
+        </small>
+    </footer>
+    
+</body>
+<script>
+    function highlightNav(heading) {
+        let pathname = location.pathname;
+        document.querySelectorAll(".toc a").forEach((item) => {
+            item.classList.remove("active");
+        });
+        document.querySelector(".toc a[href$='" + pathname + "#" + heading + "']").classList.add("active");
+    }
+
+    let currentHeading = "";
+    window.onscroll = function () {
+        let h = document.querySelectorAll("h1,h2,h3,h4,h5,h6");
+        let elementArr = [];
+
+        h.forEach(item => {
+            if (item.id !== "") {
+                elementArr[item.id] = item.getBoundingClientRect().top;
+            }
+        });
+        elementArr.sort();
+        for (let key in elementArr) {
+            if (!elementArr.hasOwnProperty(key)) {
+                continue;
+            }
+            if (elementArr[key] > 0 && elementArr[key] < 300) {
+                if (currentHeading !== key) {
+                    highlightNav(key);
+                    currentHeading = key;
+                }
+                break;
+            }
+        }
+    }
+</script>
+
+</html>

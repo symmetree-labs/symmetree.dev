@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Symmetree Research Labs</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <style>
+    :root {
+        /* Primary theme color */
+        --primary-color: #2F2FF4;
+        /* Primary theme text color */
+        --primary-text-color: #232246;
+        /* Primary theme link color */
+        --primary-link-color: #CA2A4C;
+        /* Secondary color: the background body color */
+        --secondary-color: #ECF0F1;
+        --secondary-text-color: #2F2FF4;
+        /* Highlight text color of table of content */
+        --toc-highlight-text-color: #d46e13;
+	--hero-background-color: #ECF0F1; 
+	--hero-text-color: #232246; 
+    }
+</style>
+
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,500,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Poppins:400,500,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/normalize.css">
+    <link rel="stylesheet" href="https://symmetree.dev/main.css">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#2f2ff4">
+    <link rel="alternate" type="application/atom+xml" title="Atom Feed" href="https://symmetree.dev/atom.xml">
+    <meta name="description" content="fast and secure storage">
+    <meta name="msapplication-TileColor" content="#ecf0f1">
+    <meta name="theme-color" content="#ffffff">
+    <meta property="twitter:site" content="@rhapsodhy">
+    <meta property="twitter:title" content="rsdy">
+    <meta property="twitter:card" content="summary">
+    <meta property="og:site_name" content="symmetree.dev">
+    <meta property="og:locale" content="en-us">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://symmetree.dev/">
+    <meta property="og:title" content="symmetree.dev">
+    
+    
+</head>
+
+<body>
+    
+
+    <header class="pos-absolute">
+        
+
+<a href="https:&#x2F;&#x2F;symmetree.dev&#x2F;">
+    <div class="logo">
+        <div alt="logo"></div>
+    </div>
+</a>
+
+<nav>
+    
+    
+
+    <a id="blog" class="nav-item" href="/blog">Blog</a>
+
+    <a class="nav-item"  href="https://symmetree.dev/atom.xml"><img class="item filter-invert" src="/rss.svg" alt="RSS feed" title="RSS feed"></a>
+    <a class="nav-item"  href="https://github.com/symmetree-labs/"><img class="item" src="/github.png" title="All the code" alt="GitHub"></a>
+    <a class="nav-item"  href="mailto:hello@symmetree.dev?subject=Hello!&body=I%20am%20getting%20in%20touch%20to%20discuss%20the%20life,%20the%20universe,%20and%20everything..."><img class="item filter-invert" src="/email.svg" alt="Get in touch!" title="Email us!"></a>
+</nav>
+
+    </header>
+
+    
+    
+
+    
+
+    <main>
+        
+        
+        
+        
+        
+        
+
+        <div class="content text">
+	  
+<h1 class="title">
+  Hardware and asymmetry: what&#x27;s new in Zerostash 0.5
+</h1>
+<p class="subtitle"><strong>2022-07-26</strong></p>
+<p>0.5 is a huge milestone for Zerostash, paving the way for some long-term plans, including truly write-only backups. With 0.5, we're half-way there to truly ransomware-resistant backups. In this process, Zerostash 0.5 will also transparently upgrade your existing archives to a more robust encryption scheme that mitigates nonce-reuse and potential <a href="https://eprint.iacr.org/2020/1491.pdf">partitioning oracle attacks</a>.</p>
+<h1 id="write-only-archives">Write-only archives</h1>
+<p>With Zerostash 0.5 you can create a write-only archive on an ordinary storage. While this mode is not useful against an attacker destroying your backups, it will help you make sure they can't read the archive contents without the correct keys. Note that the index is still accessible using your symmetric password, so they'll see all the file names, but not the contents.</p>
+<p>This is how you do back up your entire <code>/</code>:</p>
+<pre style="background-color:#fafafa;color:#61676c;"><code><span>0s keys gen /path/to/stash split_key --user server_backup@symmetree.dev \
+</span><span>                                     --read-keyfile ~/read_key.toml \
+</span><span>                                     --write-keyfile ~/write_key.toml
+</span><span>0s commit --keyfile ~/write.key.toml /path/to/stash /
+</span></code></pre>
+<h1 id="hardware-based-encryption-with-yubikeys">Hardware-based encryption with Yubikeys</h1>
+<p>Road warriors will appreciate that there's now a way to give a bit more of a personal touch to their backups. A Yubikey configured to perform Challenge-Response HMAC-SHA1 operations <em>can</em> require a touch to decrypt then re-seal the archive. Using challenge-response mode also allows you to easily create a backup Yubikey.</p>
+<p>Note, that if you decide that touch is what you want, you will need to pay attention to when <code>0s</code> finishes crunching your data, and seals the stash. To set up the Yubikey, consult the <a href="https://strongbox.reamaze.com/kb/yubikey/how-do-i-create-a-yubikey-protected">amazing documentation</a> by Strongbox. If you just wanted to create an archive of your user directory on an external disk, this is how you do it:</p>
+<pre style="background-color:#fafafa;color:#61676c;"><code><span>0s commit --yubikey /mnt/path/to/stash /home/user
+</span></code></pre>
+<p>Depending on your preferences, you may want to create a keyfile:</p>
+<pre style="background-color:#fafafa;color:#61676c;"><code><span>0s keys gen /mnt/path/to/stash yubikey slot2 hmac1 --user road_warrior@symmetree.dev --keyfile home_backup.toml 
+</span></code></pre>
+<h1 id="hardware-security-with-macos-keychain">Hardware security with macOS Keychain</h1>
+<p>macOS users will appreciate that they can configure Keychain to store their passwords. On modern mac laptops, this means your Zerostash credentials are protected by the Secure Enclave. You can use this feature in conjunction with your Yubikey or <code>split_key</code> keys, too. If you're adventurous, synchronizing your Keychain with your iCloud account will enable access to your stashes on other fruity devices.</p>
+<p>To generate a keyfile with Yubikey that picks your password from Keychain:</p>
+<pre style="background-color:#fafafa;color:#61676c;"><code><span>0s keys gen /mnt/path/to/stash yubikey --keychain --keyfile home_backup.toml
+</span></code></pre>
+<p>To simply run a backup and save the password to Keychain:</p>
+<pre style="background-color:#fafafa;color:#61676c;"><code><span>0s keys commit --keychain --user home_backup@symmetree.dev /mnt/path/to/stash /home/user
+</span></code></pre>
+<h1 id="changing-password">Changing password</h1>
+<p>Up until now, there was now way to change the password of a stash once you create it. This has now <em>changed</em>. Right this way, please:</p>
+<pre style="background-color:#fafafa;color:#61676c;"><code><span>0s keys change /path/to/stash toml --keyfile home_backup.toml
+</span></code></pre>
+<p>To explore the full suite of new key operations, you can always consult the helpdesk:</p>
+<pre style="background-color:#fafafa;color:#61676c;"><code><span>0s keys --help
+</span></code></pre>
+<h1 id="i-want-to-try-this-right-now">I want to try this, right now!</h1>
+<p>That's good to hear. You can access the binaries for Linux, Windows, and macOS straight from the <a href="https://github.com/symmetree-labs/zerostash/releases/tag/v0.5.0">GitHub release</a>. You can also use <a href="https://github.com/symmetree-labs/homebrew-tap">Homebrew</a> and <a href="https://github.com/symmetree-labs/zerostash#installation-on-nixos">Nix</a> to install a packaged version in your system!</p>
+<p>Have fun, and happy hacking!</p>
+
+
+        </div>
+
+        
+        
+    </main>
+
+    
+    <footer>
+        <small class="subtext">
+            <a href="https://symmetree.dev">Symmetree Research Labs</a> © 2022
+        </small>
+    </footer>
+    
+</body>
+<script>
+    function highlightNav(heading) {
+        let pathname = location.pathname;
+        document.querySelectorAll(".toc a").forEach((item) => {
+            item.classList.remove("active");
+        });
+        document.querySelector(".toc a[href$='" + pathname + "#" + heading + "']").classList.add("active");
+    }
+
+    let currentHeading = "";
+    window.onscroll = function () {
+        let h = document.querySelectorAll("h1,h2,h3,h4,h5,h6");
+        let elementArr = [];
+
+        h.forEach(item => {
+            if (item.id !== "") {
+                elementArr[item.id] = item.getBoundingClientRect().top;
+            }
+        });
+        elementArr.sort();
+        for (let key in elementArr) {
+            if (!elementArr.hasOwnProperty(key)) {
+                continue;
+            }
+            if (elementArr[key] > 0 && elementArr[key] < 300) {
+                if (currentHeading !== key) {
+                    highlightNav(key);
+                    currentHeading = key;
+                }
+                break;
+            }
+        }
+    }
+</script>
+
+</html>

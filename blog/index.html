@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Symmetree Research Labs</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <style>
+    :root {
+        /* Primary theme color */
+        --primary-color: #2F2FF4;
+        /* Primary theme text color */
+        --primary-text-color: #232246;
+        /* Primary theme link color */
+        --primary-link-color: #CA2A4C;
+        /* Secondary color: the background body color */
+        --secondary-color: #ECF0F1;
+        --secondary-text-color: #2F2FF4;
+        /* Highlight text color of table of content */
+        --toc-highlight-text-color: #d46e13;
+	--hero-background-color: #ECF0F1; 
+	--hero-text-color: #232246; 
+    }
+</style>
+
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:400,500,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Poppins:400,500,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/normalize.css">
+    <link rel="stylesheet" href="https://symmetree.dev/main.css">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#2f2ff4">
+    <link rel="alternate" type="application/atom+xml" title="Atom Feed" href="https://symmetree.dev/atom.xml">
+    <meta name="description" content="fast and secure storage">
+    <meta name="msapplication-TileColor" content="#ecf0f1">
+    <meta name="theme-color" content="#ffffff">
+    <meta property="twitter:site" content="@rhapsodhy">
+    <meta property="twitter:title" content="rsdy">
+    <meta property="twitter:card" content="summary">
+    <meta property="og:site_name" content="symmetree.dev">
+    <meta property="og:locale" content="en-us">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://symmetree.dev/">
+    <meta property="og:title" content="symmetree.dev">
+    
+    
+</head>
+
+<body>
+    
+
+    <header class="pos-absolute">
+        
+
+<a href="https:&#x2F;&#x2F;symmetree.dev&#x2F;">
+    <div class="logo">
+        <div alt="logo"></div>
+    </div>
+</a>
+
+<nav>
+    
+    
+
+    <a id="blog" class="nav-item" href="/blog">Blog</a>
+
+    <a class="nav-item"  href="https://symmetree.dev/atom.xml"><img class="item filter-invert" src="/rss.svg" alt="RSS feed" title="RSS feed"></a>
+    <a class="nav-item"  href="https://github.com/symmetree-labs/"><img class="item" src="/github.png" title="All the code" alt="GitHub"></a>
+    <a class="nav-item"  href="mailto:hello@symmetree.dev?subject=Hello!&body=I%20am%20getting%20in%20touch%20to%20discuss%20the%20life,%20the%20universe,%20and%20everything..."><img class="item filter-invert" src="/email.svg" alt="Get in touch!" title="Email us!"></a>
+</nav>
+
+    </header>
+
+    
+    
+
+    
+
+    <main>
+        
+        
+        
+        
+
+        <div class="content text">
+	  
+<h1 class="title">
+  Symmetree Blog
+</h1>
+
+<ul>
+  
+  <li>2022-07-29 - <a href="https://symmetree.dev/blog/04-api-to-cli/">Carrying API guarantees to the command line with Clap</a></li>
+  
+  <li>2022-07-26 - <a href="https://symmetree.dev/blog/03-hardware-and-asymmetry-05/">Hardware and asymmetry: what&#x27;s new in Zerostash 0.5</a></li>
+  
+  <li>2022-06-08 - <a href="https://symmetree.dev/blog/02-anatomy-of-encrypted-storage/">Stash, Cache, and Keys: Anatomy of Encrypted Storage</a></li>
+  
+  <li>2022-05-16 - <a href="https://symmetree.dev/blog/01-serious-backups/">Time to take a hard look at securing files</a></li>
+  
+</ul>
+
+        </div>
+
+        
+        
+    </main>
+
+    
+    <footer>
+        <small class="subtext">
+            <a href="https://symmetree.dev">Symmetree Research Labs</a> © 2022
+        </small>
+    </footer>
+    
+</body>
+<script>
+    function highlightNav(heading) {
+        let pathname = location.pathname;
+        document.querySelectorAll(".toc a").forEach((item) => {
+            item.classList.remove("active");
+        });
+        document.querySelector(".toc a[href$='" + pathname + "#" + heading + "']").classList.add("active");
+    }
+
+    let currentHeading = "";
+    window.onscroll = function () {
+        let h = document.querySelectorAll("h1,h2,h3,h4,h5,h6");
+        let elementArr = [];
+
+        h.forEach(item => {
+            if (item.id !== "") {
+                elementArr[item.id] = item.getBoundingClientRect().top;
+            }
+        });
+        elementArr.sort();
+        for (let key in elementArr) {
+            if (!elementArr.hasOwnProperty(key)) {
+                continue;
+            }
+            if (elementArr[key] > 0 && elementArr[key] < 300) {
+                if (currentHeading !== key) {
+                    highlightNav(key);
+                    currentHeading = key;
+                }
+                break;
+            }
+        }
+    }
+</script>
+
+</html>
